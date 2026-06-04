@@ -331,6 +331,7 @@ def descargar_archivo(id):
         flash("Archivo no encontrado.")
         return redirect(url_for('index'))
     
+# --------------------------------------------------
 
 @app.route("/ticket/estado/<int:id>", methods=['GET', 'POST'])
 def cambiar_estado(id):
@@ -582,6 +583,7 @@ def gestionar_categorias():
 
     return render_template('categorias.html', categorias=listar_categorias())
 
+# ------------------------------------------------------------------
 
 @app.route('/dashboard')
 def dashboard():
@@ -681,6 +683,8 @@ def dashboard():
         sla_resol_vencidos=sla_resol_vencidos,
         sla_en_riesgo=sla_en_riesgo,
     )
+
+# -------------------------------------------------------------
 
 
 @app.route('/notificaciones')
