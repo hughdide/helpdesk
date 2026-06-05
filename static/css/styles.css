@@ -95,17 +95,10 @@
 
 .sidebar {
     position: fixed;
-<<<<<<< Updated upstream
-    top: 60px; /* AHORA el menú empieza debajo del navbar */
-    left: -240px;
-    width: 230px;
-    height: calc(100vh - 60px); /* Ajuste para que no sobresalga */
-=======
     top: 64px;
     left: -240px;
     width: 230px;
     height: calc(100vh - 64px);
->>>>>>> Stashed changes
     background-color: var(--azul-pastel);
     padding-top: 20px;
     box-shadow: 3px 0 10px rgba(122, 156, 255, 0.3);
@@ -221,11 +214,7 @@
 /* Botón hamburguesa */
 .sidebar-toggle {
     position: fixed;
-<<<<<<< Updated upstream
-    top: 70px; /* Alineado con el nuevo sidebar */
-=======
     top: 74px;
->>>>>>> Stashed changes
     left: 15px;
     background-color: var(--azul-intenso);
     color: var(--blanco);
@@ -253,7 +242,6 @@
 
 .sidebar.active ~ .main-content {
     margin-left: 240px;
-    margin-top: 60px; /* Alineado con navbar */
 }
 
 /* ===========================

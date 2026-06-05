@@ -356,7 +356,6 @@ def descargar_archivo(id):
         flash("Archivo no encontrado.")
         return redirect(url_for('index'))
     
-# --------------------------------------------------
 
 # Detalle del ticket. Ver información, historial, comentar, tomar ticket y gestionar (agente/admin).
 @app.route("/ticket/<int:id>", methods=['GET', 'POST'])
@@ -606,7 +605,6 @@ def gestionar_categorias():
 
     return render_template('categorias.html', categorias=listar_categorias())
 
-# ------------------------------------------------------------------
 
 # Panel de estadísticas — totales, SLA, gráficos y últimos tickets (agente y administrador).
 @app.route('/dashboard')
@@ -617,67 +615,79 @@ def dashboard():
         flash("Solo agentes y administradores pueden ver estadísticas.")
         return redirect(url_for('index'))
 
-    micursor.execute("SELECT COUNT(*) AS n FROM tickets")
-    total = micursor.fetchone()['n']
+    agente_filtro = request.args.get('agente_id', '').strip()
+    filtro_agente_id = int(agente_filtro) if agente_filtro else None
+    filtro_sql = ''
+    filtro_params = ()
+    if filtro_agente_id:
+        filtro_sql = ' AND agente_id = %s'
+        filtro_params = (filtro_agente_id,)
 
-    micursor.execute("SELECT COUNT(*) AS n FROM tickets WHERE estado='Abierto'")
-    abiertos = micursor.fetchone()['n']
+    def contar(sql, extra_params=()):
+        micursor.execute(sql + filtro_sql, filtro_params + extra_params)
+        return micursor.fetchone()['n']
 
-    micursor.execute("SELECT COUNT(*) AS n FROM tickets WHERE estado='En proceso'")
-    proceso = micursor.fetchone()['n']
-
-    micursor.execute("SELECT COUNT(*) AS n FROM tickets WHERE estado='Cerrado'")
-    cerrados = micursor.fetchone()['n']
-
-    micursor.execute("SELECT COUNT(*) AS n FROM tickets WHERE prioridad='alta' AND estado != 'Cerrado'")
-    alta_abiertos = micursor.fetchone()['n']
-
-    micursor.execute("SELECT COUNT(*) AS n FROM tickets WHERE agente_id IS NULL AND estado != 'Cerrado'")
-    sin_asignar = micursor.fetchone()['n']
-
-    micursor.execute("""
+    total = contar("SELECT COUNT(*) AS n FROM tickets WHERE 1=1")
+    abiertos = contar("SELECT COUNT(*) AS n FROM tickets WHERE estado='Abierto'")
+    proceso = contar("SELECT COUNT(*) AS n FROM tickets WHERE estado='En proceso'")
+    cerrados = contar("SELECT COUNT(*) AS n FROM tickets WHERE estado='Cerrado'")
+    alta_abiertos = contar(
+        "SELECT COUNT(*) AS n FROM tickets WHERE prioridad='alta' AND estado != 'Cerrado'"
+    )
+    sin_asignar = contar(
+        "SELECT COUNT(*) AS n FROM tickets WHERE agente_id IS NULL AND estado != 'Cerrado'"
+    )
+    cerrados_semana = contar("""
         SELECT COUNT(*) AS n FROM tickets
         WHERE estado='Cerrado' AND cerrado_en >= DATE_SUB(NOW(), INTERVAL 7 DAY)
     """)
-    cerrados_semana = micursor.fetchone()['n']
 
     micursor.execute("""
         SELECT a.nombre, COUNT(t.id) AS total
         FROM tickets t
         INNER JOIN usuarios a ON t.agente_id = a.id
         WHERE t.estado != 'Cerrado'
+        """ + (filtro_sql.replace('agente_id', 't.agente_id') if filtro_sql else '') + """
         GROUP BY a.nombre
         ORDER BY total DESC
-    """)
+    """, filtro_params)
     por_agente = micursor.fetchall()
 
-    micursor.execute("""
+    sql_categoria = """
         SELECT cat.nombre, COUNT(t.id) AS total
         FROM tickets t
         LEFT JOIN categorias cat ON t.categoria_id = cat.id
-        GROUP BY cat.nombre
-        ORDER BY total DESC
-    """)
+        WHERE 1=1
+    """
+    if filtro_sql:
+        sql_categoria += filtro_sql.replace('agente_id', 't.agente_id')
+    sql_categoria += " GROUP BY cat.nombre ORDER BY total DESC"
+    micursor.execute(sql_categoria, filtro_params)
     por_categoria = micursor.fetchall()
 
-    micursor.execute("SELECT titulo, creado_en FROM tickets ORDER BY creado_en DESC LIMIT 5")
+    sql_ultimos = "SELECT titulo, creado_en FROM tickets WHERE 1=1"
+    sql_ultimos += filtro_sql + " ORDER BY creado_en DESC LIMIT 5"
+    micursor.execute(sql_ultimos, filtro_params)
     ultimos = micursor.fetchall()
 
+    sla_filtro = filtro_sql.replace('agente_id', 't.agente_id') if filtro_sql else ''
+    sla_params = filtro_params
+
     micursor.execute("""
-        SELECT COUNT(*) AS n FROM tickets
-        WHERE estado != 'Cerrado'
-          AND primera_respuesta_en IS NULL
-          AND sla_respuesta_limite IS NOT NULL
-          AND NOW() > sla_respuesta_limite
-    """)
+        SELECT COUNT(*) AS n FROM tickets t
+        WHERE t.estado != 'Cerrado'
+          AND t.primera_respuesta_en IS NULL
+          AND t.sla_respuesta_limite IS NOT NULL
+          AND NOW() > t.sla_respuesta_limite
+    """ + sla_filtro, sla_params)
     sla_resp_vencidos = micursor.fetchone()['n']
 
     micursor.execute("""
-        SELECT COUNT(*) AS n FROM tickets
-        WHERE estado != 'Cerrado'
-          AND sla_resolucion_limite IS NOT NULL
-          AND NOW() > sla_resolucion_limite
-    """)
+        SELECT COUNT(*) AS n FROM tickets t
+        WHERE t.estado != 'Cerrado'
+          AND t.sla_resolucion_limite IS NOT NULL
+          AND NOW() > t.sla_resolucion_limite
+    """ + sla_filtro, sla_params)
     sla_resol_vencidos = micursor.fetchone()['n']
 
     micursor.execute("""
@@ -688,8 +698,20 @@ def dashboard():
           AND NOW() < t.sla_respuesta_limite
           AND TIMESTAMPDIFF(SECOND, NOW(), t.sla_respuesta_limite)
               <= TIMESTAMPDIFF(SECOND, t.creado_en, t.sla_respuesta_limite) * 0.25
-    """)
+    """ + sla_filtro, sla_params)
     sla_en_riesgo = micursor.fetchone()['n']
+
+    # Gráfico de barras: tickets por agente asignado (todos los estados)
+    micursor.execute("""
+        SELECT COALESCE(a.nombre, 'Sin asignar') AS nombre, COUNT(t.id) AS total
+        FROM tickets t
+        LEFT JOIN usuarios a ON t.agente_id = a.id
+        GROUP BY t.agente_id, a.nombre
+        ORDER BY total DESC
+    """)
+    chart_agentes = micursor.fetchall()
+    agentes = [f['nombre'] for f in chart_agentes]
+    tickets_por_agente = [f['total'] for f in chart_agentes]
 
     return render_template(
         'dashboard.html',
@@ -706,9 +728,11 @@ def dashboard():
         sla_resp_vencidos=sla_resp_vencidos,
         sla_resol_vencidos=sla_resol_vencidos,
         sla_en_riesgo=sla_en_riesgo,
+        agentes=agentes,
+        tickets_por_agente=tickets_por_agente,
+        lista_agentes=listar_agentes(),
+        filtro_agente_id=filtro_agente_id,
     )
-
-# -------------------------------------------------------------
 
 
 # Historial de correos enviados por el sistema (solo administrador).

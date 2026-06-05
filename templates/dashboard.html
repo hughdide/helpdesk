@@ -1,7 +1,32 @@
 {% extends "base.html" %}
 {% block content %}
 
-<h2 class="mb-4 fw-bold">Panel de estadísticas</h2>
+<h2 class="mb-4 fw-bold text-center">Panel de estadísticas</h2>
+
+<form method="get" class="card card-soft p-3 mb-4">
+  <div class="row g-2 align-items-end">
+    <div class="col-md-6">
+      <label class="form-label small mb-1">Filtrar por agente asignado</label>
+      <select name="agente_id" class="form-select">
+        <option value="">Todos los agentes</option>
+        {% for a in lista_agentes %}
+        <option value="{{ a.id }}" {% if filtro_agente_id == a.id %}selected{% endif %}>{{ a.nombre }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3">
+      <button type="submit" class="btn btn-galsoft w-100">Filtrar</button>
+    </div>
+    <div class="col-md-3">
+      {% if filtro_agente_id %}
+      <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary w-100">Ver todos</a>
+      {% endif %}
+    </div>
+  </div>
+  {% if filtro_agente_id %}
+  <p class="small text-muted mb-0 mt-2">Mostrando estadísticas del agente seleccionado.</p>
+  {% endif %}
+</form>
 
 <div class="card card-soft p-4 mb-4">
   <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
@@ -32,12 +57,10 @@
 
 <div class="row g-3 mb-4">
   <div class="col-md-3 col-6">
-    <a href="{{ url_for('index') }}" class="text-decoration-none">
-      <div class="stat-card stat-total">
-        <h6>Total tickets</h6>
-        <p class="stat-number">{{ total }}</p>
-      </div>
-    </a>
+    <div class="stat-card stat-total">
+      <h6>Total tickets</h6>
+      <p class="stat-number">{{ total }}</p>
+    </div>
   </div>
   <div class="col-md-3 col-6">
     <div class="stat-card stat-cerrados">
@@ -95,7 +118,7 @@
   </table>
 </div>
 
-<div class="row g-4">
+<div class="row g-4 mb-4">
   <div class="col-lg-6">
     <div class="card card-soft p-3">
       <h5 class="mb-3">Tickets activos por agente</h5>
@@ -126,37 +149,106 @@
   </div>
 </div>
 
-<hr class="my-4">
+<hr class="my-5">
 
-<h5 class="mb-3">Distribución por estado</h5>
-<canvas id="chartEstados" height="100"></canvas>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-<hr class="my-4">
+<div class="row justify-content-center align-items-center mt-5">
+  <div class="col-md-4 d-flex justify-content-center">
+    <div style="width: 240px; height: 240px;">
+      <canvas id="chartEstados"></canvas>
+    </div>
+  </div>
+  <div class="col-md-6 d-flex justify-content-center">
+    <div style="width: 350px; height: 260px;">
+      <canvas id="chartAgentes"></canvas>
+    </div>
+  </div>
+</div>
 
-<h5>Últimos tickets</h5>
+<script>
+const ctx = document.getElementById('chartEstados');
+new Chart(ctx, {
+    type: 'pie',
+    data: {
+        labels: ['Abiertos', 'En proceso', 'Cerrados'],
+        datasets: [{
+            data: [{{ abiertos }}, {{ proceso }}, {{ cerrados }}],
+            backgroundColor: [
+                '#ffd6e8',
+                '#fff3b0',
+                '#bcd0ff'
+            ],
+            borderColor: '#ffffff',
+            borderWidth: 2
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'bottom',
+                labels: {
+                    color: '#2e2e2e',
+                    font: { size: 14 }
+                }
+            }
+        }
+    }
+});
+
+const ctxAgentes = document.getElementById('chartAgentes');
+new Chart(ctxAgentes, {
+    type: 'bar',
+    data: {
+        labels: {{ agentes|tojson }},
+        datasets: [{
+            label: 'Tickets por agente',
+            data: {{ tickets_por_agente|tojson }},
+            backgroundColor: [
+                '#ffd6e8',
+                '#fff3b0',
+                '#bcd0ff',
+                '#d8b4e2',
+                '#c8f7dc'
+            ],
+            borderColor: '#ffffff',
+            borderWidth: 2,
+            borderRadius: 8
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: { color: '#2e2e2e' }
+            },
+            x: {
+                ticks: { color: '#2e2e2e' }
+            }
+        },
+        plugins: {
+            legend: { display: false }
+        }
+    }
+});
+</script>
+
+<hr class="my-5">
+
+<h4 class="fw-bold">Últimos tickets creados</h4>
 <ul class="list-group">
   {% for t in ultimos %}
   <li class="list-group-item d-flex justify-content-between">
     <span>{{ t.titulo }}</span>
     <span class="text-muted small">{{ t.creado_en|fecha_es }}</span>
   </li>
+  {% else %}
+  <li class="list-group-item text-muted">No hay tickets con este filtro.</li>
   {% endfor %}
 </ul>
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-new Chart(document.getElementById('chartEstados'), {
-    type: 'pie',
-    data: {
-        labels: ['Abiertos', 'En proceso', 'Cerrados'],
-        datasets: [{
-            data: [{{ abiertos }}, {{ proceso }}, {{ cerrados }}],
-            backgroundColor: ['#d4edda', '#fff3cd', '#f8d7da'],
-            borderWidth: 2
-        }]
-    },
-    options: { plugins: { legend: { position: 'bottom' } } }
-});
-</script>
 
 {% endblock %}
