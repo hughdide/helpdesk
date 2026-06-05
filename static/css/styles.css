@@ -10,6 +10,12 @@
     --texto-oscuro: #2e2e2e;
     --lila-pastel: #d8b4e2;
     --blanco: #ffffff;
+    --badge-verde-fondo: #d4edda;
+    --badge-verde-texto: #155724;
+    --badge-amarillo-fondo: #fff3cd;
+    --badge-amarillo-texto: #856404;
+    --badge-rojo-fondo: #f8d7da;
+    --badge-rojo-texto: #721c24;
 }
 
 /* ===========================
@@ -89,10 +95,17 @@
 
 .sidebar {
     position: fixed;
+<<<<<<< Updated upstream
     top: 60px; /* AHORA el menú empieza debajo del navbar */
     left: -240px;
     width: 230px;
     height: calc(100vh - 60px); /* Ajuste para que no sobresalga */
+=======
+    top: 64px;
+    left: -240px;
+    width: 230px;
+    height: calc(100vh - 64px);
+>>>>>>> Stashed changes
     background-color: var(--azul-pastel);
     padding-top: 20px;
     box-shadow: 3px 0 10px rgba(122, 156, 255, 0.3);
@@ -105,17 +118,13 @@
     left: 0;
 }
 
-.sidebar-brand {
-    display: block;
-    padding: 12px 16px 20px;
+.sidebar-header {
+    font-size: 1.1rem;
+    font-weight: 700;
     text-align: center;
-}
-
-.sidebar-logo {
-    max-width: 100%;
-    height: auto;
-    max-height: 48px;
-    object-fit: contain;
+    color: var(--texto-oscuro);
+    padding: 8px 16px 16px;
+    margin-bottom: 4px;
 }
 
 .sidebar-menu {
@@ -212,7 +221,11 @@
 /* Botón hamburguesa */
 .sidebar-toggle {
     position: fixed;
+<<<<<<< Updated upstream
     top: 70px; /* Alineado con el nuevo sidebar */
+=======
+    top: 74px;
+>>>>>>> Stashed changes
     left: 15px;
     background-color: var(--azul-intenso);
     color: var(--blanco);
@@ -317,50 +330,32 @@
    ESTADOS
    =========================== */
 
-.estado-abierto {
-    background-color: #d4edda;
-    color: #155724;
+.estado-abierto,
+.prioridad-baja,
+.sla-cumplido,
+.sla-pendiente {
+    background-color: var(--badge-verde-fondo);
+    color: var(--badge-verde-texto);
     padding: 3px 10px;
     border-radius: 8px;
     font-weight: 600;
 }
 
-.estado-proceso {
-    background-color: #fff3cd;
-    color: #856404;
+.estado-proceso,
+.prioridad-media,
+.sla-riesgo {
+    background-color: var(--badge-amarillo-fondo);
+    color: var(--badge-amarillo-texto);
     padding: 3px 10px;
     border-radius: 8px;
     font-weight: 600;
 }
 
-.estado-cerrado {
-    background-color: #f8d7da;
-    color: #721c24;
-    padding: 3px 10px;
-    border-radius: 8px;
-    font-weight: 600;
-}
-
-/* Prioridad del ticket */
-.prioridad-baja {
-    background-color: #d4edda;
-    color: #155724;
-    padding: 3px 10px;
-    border-radius: 8px;
-    font-weight: 600;
-}
-
-.prioridad-media {
-    background-color: #fff3cd;
-    color: #856404;
-    padding: 3px 10px;
-    border-radius: 8px;
-    font-weight: 600;
-}
-
-.prioridad-alta {
-    background-color: #ffccb3;
-    color: #9a3412;
+.estado-cerrado,
+.prioridad-alta,
+.sla-vencido {
+    background-color: var(--badge-rojo-fondo);
+    color: var(--badge-rojo-texto);
     padding: 3px 10px;
     border-radius: 8px;
     font-weight: 600;
@@ -410,15 +405,15 @@ body {
 }
 
 .stat-abiertos {
-    background-color: #ffd6e8; /* rosa pastel */
+    background-color: #d4edda; /* verde suave */
 }
 
 .stat-proceso {
-    background-color: #fff3b0; /* amarillo suave */
+    background-color: #fff3cd; /* amarillo suave */
 }
 
 .stat-cerrados {
-    background-color: #bcd0ff; /* lila pastel */
+    background-color: #f8d7da; /* rojo suave */
 }
 
 .stat-card:hover {
@@ -484,18 +479,110 @@ body {
 
 .sla-badge {
     display: inline-block;
-    padding: 2px 8px;
-    border-radius: 6px;
-    font-size: 0.75rem;
+    padding: 3px 10px;
+    border-radius: 8px;
+    font-size: 0.85rem;
     font-weight: 600;
 }
-
-.sla-cumplido { background: #d4edda; color: #155724; }
-.sla-pendiente { background: #e7f1ff; color: #1e4a8a; }
-.sla-riesgo { background: #fff3cd; color: #856404; }
-.sla-vencido { background: #f8d7da; color: #721c24; }
 
 .sla-panel {
     background: #f8faff;
     border: 1px solid var(--azul-medio);
+}
+
+/* ===========================
+   PIE DE PÁGINA Y MANUALES
+   =========================== */
+
+.site-footer .footer-link {
+    color: var(--azul-intenso);
+    text-decoration: none;
+}
+
+.site-footer .footer-link:hover {
+    color: var(--azul-hover);
+    text-decoration: underline;
+}
+
+.manual-contenido {
+    background: var(--blanco);
+    border-radius: 12px;
+    padding: 1.5rem 2rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    line-height: 1.6;
+}
+
+.manual-contenido h1,
+.manual-contenido h2,
+.manual-contenido h3 {
+    color: var(--texto-oscuro);
+    margin-top: 1.25rem;
+}
+
+.manual-contenido blockquote {
+    margin: 1rem 0;
+    padding: 0.65rem 1rem;
+    font-size: 0.95rem;
+    background: #f0f4ff;
+    border-left: 4px solid var(--azul-medio);
+    border-radius: 0 8px 8px 0;
+    color: var(--texto-oscuro);
+}
+
+.manual-contenido table {
+    width: 100%;
+    margin: 1rem 0;
+    border-collapse: collapse;
+    font-size: 0.95rem;
+}
+
+.manual-contenido th,
+.manual-contenido td {
+    border: 1px solid #dee2e6;
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+}
+
+.manual-contenido th {
+    background: #f0f4ff;
+}
+
+.manual-contenido code {
+    background: #f4f4f4;
+    padding: 0.1rem 0.35rem;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+.manual-contenido pre {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 0.85rem;
+}
+
+.manual-contenido .mermaid {
+    margin: 1.25rem 0;
+    padding: 1rem;
+    background: #f8faff;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    overflow-x: auto;
+    text-align: center;
+}
+
+.manual-contenido table span.estado-abierto,
+.manual-contenido table span.estado-proceso,
+.manual-contenido table span.estado-cerrado,
+.manual-contenido table span.prioridad-baja,
+.manual-contenido table span.prioridad-media,
+.manual-contenido table span.prioridad-alta,
+.manual-contenido table span.sla-cumplido,
+.manual-contenido table span.sla-pendiente,
+.manual-contenido table span.sla-riesgo,
+.manual-contenido table span.sla-vencido {
+    display: inline-block;
+    white-space: nowrap;
 }

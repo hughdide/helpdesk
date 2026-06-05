@@ -40,7 +40,7 @@
     </a>
   </div>
   <div class="col-md-3 col-6">
-    <div class="stat-card" style="background:#ffccb3;">
+    <div class="stat-card stat-cerrados">
       <h6>Prioridad alta (abiertos)</h6>
       <p class="stat-number">{{ alta_abiertos }}</p>
     </div>
@@ -64,7 +64,7 @@
   <div class="row g-3 mb-3">
     <div class="col-md-4">
       <a href="{{ url_for('index') }}?sla=vencido" class="text-decoration-none">
-        <div class="stat-card" style="background:#f8d7da;">
+        <div class="stat-card stat-cerrados">
           <h6>Respuesta vencida</h6>
           <p class="stat-number">{{ sla_resp_vencidos }}</p>
         </div>
@@ -72,14 +72,14 @@
     </div>
     <div class="col-md-4">
       <a href="{{ url_for('index') }}?sla=vencido" class="text-decoration-none">
-        <div class="stat-card" style="background:#f8d7da;">
+        <div class="stat-card stat-cerrados">
           <h6>Resolución vencida</h6>
           <p class="stat-number">{{ sla_resol_vencidos }}</p>
         </div>
       </a>
     </div>
     <div class="col-md-4">
-      <div class="stat-card" style="background:#fff3cd;">
+      <div class="stat-card stat-proceso">
         <h6>En riesgo (último 25% del plazo)</h6>
         <p class="stat-number">{{ sla_en_riesgo }}</p>
       </div>
@@ -138,7 +138,7 @@
   {% for t in ultimos %}
   <li class="list-group-item d-flex justify-content-between">
     <span>{{ t.titulo }}</span>
-    <span class="text-muted small">{{ t.creado_en }}</span>
+    <span class="text-muted small">{{ t.creado_en|fecha_es }}</span>
   </li>
   {% endfor %}
 </ul>
@@ -151,7 +151,7 @@ new Chart(document.getElementById('chartEstados'), {
         labels: ['Abiertos', 'En proceso', 'Cerrados'],
         datasets: [{
             data: [{{ abiertos }}, {{ proceso }}, {{ cerrados }}],
-            backgroundColor: ['#ffd6e8', '#fff3b0', '#bcd0ff'],
+            backgroundColor: ['#d4edda', '#fff3cd', '#f8d7da'],
             borderWidth: 2
         }]
     },

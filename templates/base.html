@@ -13,9 +13,7 @@
 <button class="sidebar-toggle" type="button" onclick="toggleSidebar()" aria-label="Abrir menú">☰</button>
 
 <div class="sidebar" id="sidebar">
-  <a href="{{ url_for('index') }}" class="sidebar-brand">
-    <img src="{{ url_for('static', filename='LogoGalsoft.png') }}" alt="Galsoft" class="sidebar-logo">
-  </a>
+  <div class="sidebar-header">Menú</div>
   <ul class="sidebar-menu">
     <li><a href="{{ url_for('index') }}">Inicio</a></li>
     <li><a href="{{ url_for('new_ticket') }}">Nueva petición</a></li>
@@ -78,13 +76,15 @@
   </div>
 </div>
 
-{% if session.get('usuario_id') %}
 <footer class="site-footer">
-  <div class="container text-center small">
+  <div class="container text-center small py-2">
     © {{ 2026 }} Galsoft · Sistema de soporte técnico
+    <span class="mx-2">·</span>
+    <a href="{{ url_for('manual_usuario') }}" class="footer-link">Manual de usuario</a>
+    <span class="mx-1">|</span>
+    <a href="{{ url_for('manual_tecnico') }}" class="footer-link">Manual técnico</a>
   </div>
 </footer>
-{% endif %}
 
 <script>
 function toggleSidebar() {

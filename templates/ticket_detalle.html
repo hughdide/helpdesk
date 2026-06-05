@@ -22,9 +22,9 @@
           <span class="text-muted">Sin asignar</span>
         {% endif %}
       </p>
-      <p><strong>Fecha alta:</strong> {{ ticket.creado_en }}</p>
+      <p><strong>Fecha alta:</strong> {{ ticket.creado_en|fecha_es }}</p>
       {% if ticket.cerrado_en %}
-      <p><strong>Cerrado:</strong> {{ ticket.cerrado_en }}</p>
+      <p><strong>Cerrado:</strong> {{ ticket.cerrado_en|fecha_es }}</p>
       {% endif %}
 
       <div class="card card-soft p-3 mb-0 mt-3 sla-panel">
@@ -32,10 +32,10 @@
         <p class="small mb-1">
           <strong>Primera respuesta:</strong>
           {% if sla.primera_respuesta_en %}
-            {{ sla.primera_respuesta_en }}
+            {{ sla.primera_respuesta_en|fecha_es }}
             <span class="sla-badge sla-{{ sla.estado_respuesta }}">{{ etiqueta_estado(sla.estado_respuesta) }}</span>
           {% else %}
-            antes de {{ sla.limite_respuesta }}
+            antes de {{ sla.limite_respuesta|fecha_es }}
             {% if rol in ['agente', 'admin'] %}
             <span class="sla-badge sla-{{ sla.estado_respuesta }}">{{ etiqueta_estado(sla.estado_respuesta) }}</span>
             {% endif %}
@@ -44,10 +44,10 @@
         <p class="small mb-0">
           <strong>Resolución:</strong>
           {% if ticket.cerrado_en %}
-            {{ ticket.cerrado_en }}
+            {{ ticket.cerrado_en|fecha_es }}
             <span class="sla-badge sla-{{ sla.estado_resolucion }}">{{ etiqueta_estado(sla.estado_resolucion) }}</span>
           {% else %}
-            antes de {{ sla.limite_resolucion }}
+            antes de {{ sla.limite_resolucion|fecha_es }}
             {% if rol in ['agente', 'admin'] %}
             <span class="sla-badge sla-{{ sla.estado_resolucion }}">{{ etiqueta_estado(sla.estado_resolucion) }}</span>
             {% endif %}
@@ -165,7 +165,7 @@
         <div class="timeline-item {% if h.es_interno %}timeline-interno{% endif %}">
           <div class="timeline-meta">
             <strong>{{ h.usuario_nombre }}</strong>
-            <span class="text-muted"> · {{ h.fecha }}</span>
+            <span class="text-muted"> · {{ h.fecha|fecha_es }}</span>
           </div>
           <span class="badge bg-light text-dark border mb-1">{{ h.tipo }}</span>
           {% if h.es_interno and rol in ['agente', 'admin'] %}

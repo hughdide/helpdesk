@@ -29,12 +29,31 @@ micursor = mibd.cursor(dictionary=True)
 
 # Configuración Flask
 app = Flask(__name__)
-app.secret_key = "clave_segura_y_estable"
+app.secret_key = os.urandom(24)
 
 
 app.config['UPLOAD_FOLDER'] = os.path.join('static', 'uploads')
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
+@app.template_filter('fecha_es')
+def fecha_es(valor):
+    """Muestra fechas como DD-MM-AAAA HH:MM"""
+    if valor is None or valor == '':
+        return ''
+    if isinstance(valor, datetime):
+        dt = valor
+    else:
+        texto = str(valor)[:19]
+        try:
+            dt = datetime.strptime(texto, '%Y-%m-%d %H:%M:%S')
+        except ValueError:
+            try:
+                dt = datetime.strptime(texto[:10], '%Y-%m-%d')
+            except ValueError:
+                return str(valor)
+    return dt.strftime('%d-%m-%Y %H:%M')
+
+# Consulta base reutilizable: ticket + nombre/email del cliente y agente + nombre de categoría.
 SQL_TICKET_BASE = """
 SELECT t.*, c.nombre AS cliente_nombre, c.email AS cliente_email,
        a.nombre AS agente_nombre, a.email AS agente_email,
@@ -45,13 +64,14 @@ LEFT JOIN usuarios a ON t.agente_id = a.id
 LEFT JOIN categorias cat ON t.categoria_id = cat.id
 """
 
-
+# Añade a cada ticket del listado el estado SLA (en plazo, riesgo, vencido, etc.).
 def enriquecer_sla_listado(tickets):
     for t in tickets:
         t['sla'] = evaluar_sla(t)
     return tickets
 
 
+# Guarda una línea en ticket_historial (comentario, cambio de estado, asignación, etc.).
 def registrar_historial(ticket_id, usuario_id, tipo, detalle, es_interno=0):
     sql = """INSERT INTO ticket_historial (ticket_id, usuario_id, tipo, detalle, es_interno)
              VALUES (%s, %s, %s, %s, %s)"""
@@ -59,45 +79,55 @@ def registrar_historial(ticket_id, usuario_id, tipo, detalle, es_interno=0):
     mibd.commit()
 
 
+# Devuelve todas las categorías ordenadas por nombre (formularios y filtros).
 def listar_categorias():
     sql = "SELECT id, nombre FROM categorias ORDER BY nombre ASC"
     micursor.execute(sql)
     return micursor.fetchall()
 
 
+# Lista tickets según rol y filtros (estado, prioridad, categoría, búsqueda, SLA, etc.).
 def listar_tickets_consulta(rol, usuario_id, filtros_dict):
     sql = SQL_TICKET_BASE
     params = []
     condiciones = []
 
+    # Cliente: solo sus propios tickets
     if rol == 'cliente':
         condiciones.append("t.usuario_id = %s")
         params.append(usuario_id)
 
+    # Filtro por estado (Abierto, En proceso, Cerrado)
     if filtros_dict.get('estado'):
         condiciones.append("t.estado = %s")
         params.append(filtros_dict['estado'])
 
+    # Filtro por prioridad (baja, media, alta)
     if filtros_dict.get('prioridad'):
         condiciones.append("t.prioridad = %s")
         params.append(filtros_dict['prioridad'])
 
+    # Filtro por categoría
     if filtros_dict.get('categoria_id'):
         condiciones.append("t.categoria_id = %s")
         params.append(filtros_dict['categoria_id'])
 
+    # Agente/admin: solo tickets asignados al usuario actual
     if filtros_dict.get('mis_tickets') and rol in ['agente', 'admin']:
         condiciones.append("t.agente_id = %s")
         params.append(usuario_id)
 
+    # Agente/admin: tickets sin agente asignado
     if filtros_dict.get('sin_asignar') and rol in ['agente', 'admin']:
         condiciones.append("t.agente_id IS NULL")
 
+    # Búsqueda por texto en título o descripción
     if filtros_dict.get('buscar'):
         like = f"%{filtros_dict['buscar']}%"
         condiciones.append("(t.titulo LIKE %s OR t.descripcion LIKE %s)")
         params.extend([like, like])
 
+    # Agente/admin: tickets abiertos con SLA de respuesta o resolución vencido
     if filtros_dict.get('sla') == 'vencido' and filtros_dict.get('rol') in ['agente', 'admin']:
         condiciones.append("t.estado != 'Cerrado'")
         condiciones.append(
@@ -112,6 +142,7 @@ def listar_tickets_consulta(rol, usuario_id, filtros_dict):
     return micursor.fetchall()
 
 
+# Obtiene un ticket por id; el cliente solo puede ver los suyos.
 def obtener_ticket(ticket_id, rol, usuario_id):
     sql = SQL_TICKET_BASE + " WHERE t.id = %s"
     params = [ticket_id]
@@ -122,6 +153,7 @@ def obtener_ticket(ticket_id, rol, usuario_id):
     return micursor.fetchone()
 
 
+# Historial de un ticket; el cliente no ve entradas con es_interno = 1.
 def listar_historial_ticket(ticket_id, rol):
     sql = """SELECT h.*, u.nombre AS usuario_nombre
              FROM ticket_historial h
@@ -135,12 +167,14 @@ def listar_historial_ticket(ticket_id, rol):
     return micursor.fetchall()
 
 
+# Lista usuarios con rol agente o admin (para asignar tickets en gestión).
 def listar_agentes():
     sql = "SELECT id, nombre FROM usuarios WHERE rol IN ('agente', 'admin') ORDER BY nombre ASC"
     micursor.execute(sql)
     return micursor.fetchall()
 
 
+# Inicio — listado de tickets (con filtros). Cliente ve solo los suyos; agente/admin ven todos.
 @app.route("/")
 def index():
     if 'usuario_id' not in session:
@@ -177,10 +211,7 @@ def index():
     )
 
 
-# **************************************
-
-
-
+# Crear ticket nuevo. GET muestra formulario; POST guarda en BD, historial y aviso por correo.
 @app.route('/ticket/nuevo', methods=['GET', 'POST'])
 def new_ticket():
     if 'usuario_id' not in session:
@@ -245,9 +276,7 @@ def new_ticket():
     return render_template('new_ticket.html', categorias=listar_categorias())
 
 
-
-# ****************************************
-
+# Iniciar sesión. Comprueba email y contraseña y guarda usuario en session.
 @app.route("/login", methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -272,10 +301,7 @@ def login():
     return render_template("login.html")
 
 
-
-
-# ********************************************
-
+# Registro público. Crea cuenta nueva con rol cliente.
 @app.route("/register", methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
@@ -302,8 +328,7 @@ def register():
     return render_template("register.html")
 
 
-
-# *********************************************
+# Cerrar sesión. Borra los datos de session y vuelve al login.
 @app.route("/logout")
 def logout():
     session.clear()
@@ -311,7 +336,7 @@ def logout():
     return redirect(url_for('login'))
 
 
-# **********************************************
+# Descargar archivo adjunto de un ticket (desde la base de datos).
 @app.route('/descargar/<int:id>')
 def descargar_archivo(id):
     sql = "SELECT archivo, archivo_blob FROM tickets WHERE id = %s"
@@ -333,11 +358,7 @@ def descargar_archivo(id):
     
 # --------------------------------------------------
 
-@app.route("/ticket/estado/<int:id>", methods=['GET', 'POST'])
-def cambiar_estado(id):
-    return redirect(url_for('ticket_detalle', id=id))
-
-
+# Detalle del ticket. Ver información, historial, comentar, tomar ticket y gestionar (agente/admin).
 @app.route("/ticket/<int:id>", methods=['GET', 'POST'])
 def ticket_detalle(id):
     if 'usuario_id' not in session:
@@ -492,7 +513,7 @@ def ticket_detalle(id):
     )
 
 
-# ***********************************************
+# Listado de usuarios del sistema (solo administrador).
 @app.route('/usuarios')
 def listar_usuarios():
     if 'usuario_id' not in session:
@@ -516,6 +537,7 @@ def listar_usuarios():
     return render_template('usuarios.html', usuarios=usuarios, buscar=buscar)
 
 
+# Editar usuario — nombre, email, rol y contraseña (solo administrador).
 @app.route('/usuario/editar/<int:id>', methods=['GET', 'POST'])
 def editar_usuario(id):
     if 'usuario_id' not in session:
@@ -562,6 +584,7 @@ def editar_usuario(id):
     return render_template('editar_usuario.html', usuario=usuario)
 
 
+# Gestionar categorías de tickets — listar y crear nuevas (solo administrador).
 @app.route('/categorias', methods=['GET', 'POST'])
 def gestionar_categorias():
     if 'usuario_id' not in session:
@@ -585,6 +608,7 @@ def gestionar_categorias():
 
 # ------------------------------------------------------------------
 
+# Panel de estadísticas — totales, SLA, gráficos y últimos tickets (agente y administrador).
 @app.route('/dashboard')
 def dashboard():
     if 'usuario_id' not in session:
@@ -687,6 +711,7 @@ def dashboard():
 # -------------------------------------------------------------
 
 
+# Historial de correos enviados por el sistema (solo administrador).
 @app.route('/notificaciones')
 def historial_notificaciones():
     if 'usuario_id' not in session:
@@ -703,6 +728,42 @@ def historial_notificaciones():
     )
 
 
-# ------------------- EJECUCIÓN -------------------
+def _leer_manual(nombre_archivo):
+    ruta = os.path.join(os.path.dirname(__file__), nombre_archivo)
+    if not os.path.isfile(ruta):
+        return None
+    with open(ruta, encoding='utf-8') as f:
+        return f.read()
+
+
+# Manual de usuario — documentación para clientes, agentes y administradores.
+@app.route('/manual/usuario')
+def manual_usuario():
+    texto = _leer_manual('MANUAL_USUARIO.md')
+    if texto is None:
+        flash('No se encontró el manual de usuario.')
+        return redirect(url_for('index') if session.get('usuario_id') else url_for('login'))
+    return render_template(
+        'manual_view.html',
+        titulo='Manual de usuario',
+        contenido_md=texto,
+    )
+
+
+# Manual técnico — arquitectura, base de datos y despliegue (evaluación).
+@app.route('/manual/tecnico')
+def manual_tecnico():
+    texto = _leer_manual('MANUAL_TECNICO.md')
+    if texto is None:
+        flash('No se encontró el manual técnico.')
+        return redirect(url_for('index') if session.get('usuario_id') else url_for('login'))
+    return render_template(
+        'manual_view.html',
+        titulo='Manual técnico',
+        contenido_md=texto,
+    )
+
+
+# Ejecución
 if __name__ == "__main__":
     app.run(debug=True)

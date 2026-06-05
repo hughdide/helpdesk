@@ -101,7 +101,7 @@
           <span class="sla-badge sla-{{ t.sla.estado_global }}">{{ etiqueta_estado(t.sla.estado_global) }}</span>
         </li>
         {% endif %}
-        <li class="text-muted mt-2">{{ t.creado_en }}</li>
+        <li class="text-muted mt-2">{{ t.creado_en|fecha_es }}</li>
       </ul>
 
       <a href="{{ url_for('ticket_detalle', id=t.id) }}" class="btn btn-galsoft btn-sm w-100 mt-auto">Ver detalle</a>
