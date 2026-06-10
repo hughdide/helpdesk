@@ -312,9 +312,12 @@ def register():
 
         # Encriptar contraseña
         password_hash = generate_password_hash(password)
+        pregunta = request.form['pregunta_secreta']
+        respuesta = request.form['respuesta_secreta'].strip()
+        hash_respuesta = generate_password_hash(respuesta)
 
-        sql = "INSERT INTO usuarios (nombre, email, password, rol) VALUES (%s, %s, %s, %s)"
-        valores = (nombre, email, password_hash, rol)
+        sql = "INSERT INTO usuarios (nombre, email, password, rol, pregunta_secreta, respuesta_secreta) VALUES (%s, %s, %s, %s, %s, %s)"
+        valores = (nombre, email, password_hash, rol, pregunta, hash_respuesta)
 
         try:
             micursor.execute(sql, valores)
@@ -786,6 +789,52 @@ def manual_tecnico():
         titulo='Manual técnico',
         contenido_md=texto,
     )
+
+# ***************************************************
+# pregunta secreta
+@app.route('/olvide', methods=['GET', 'POST'])
+def olvide_contrasena():
+   if request.method == 'POST':
+       email = request.form['email'].strip()
+       micursor.execute("SELECT id, pregunta_secreta FROM usuarios WHERE email=%s", (email,))
+       user = micursor.fetchone()
+       if not user:
+           flash("No existe un usuario con ese correo.")
+           return redirect(url_for('olvide_contrasena'))
+       return redirect(url_for('pregunta_secreta', id=user['id']))
+   return render_template('olvide_contrasena.html')
+
+# Ruta para mostrar preguntas secretas
+@app.route('/pregunta/<int:id>', methods=['GET', 'POST'])
+def pregunta_secreta(id):
+   micursor.execute("SELECT pregunta_secreta FROM usuarios WHERE id=%s", (id,))
+   user = micursor.fetchone()
+   if not user:
+       flash("Usuario no encontrado.")
+       return redirect(url_for('login'))
+   if request.method == 'POST':
+       respuesta = request.form['respuesta'].strip()
+       micursor.execute("SELECT respuesta_secreta FROM usuarios WHERE id=%s", (id,))
+       fila = micursor.fetchone()
+       # Comparar hash
+       if check_password_hash(fila['respuesta_secreta'], respuesta):
+           return redirect(url_for('reset_password', id=id))
+       else:
+           flash("Respuesta incorrecta.")
+           return redirect(url_for('pregunta_secreta', id=id))
+   return render_template('pregunta_secreta.html', pregunta=user['pregunta_secreta'])
+
+# cambiar contraseña
+@app.route('/reset/<int:id>', methods=['GET', 'POST'])
+def reset_password(id):
+   if request.method == 'POST':
+       nueva = request.form['password']
+       hash_pw = generate_password_hash(nueva)
+       micursor.execute("UPDATE usuarios SET password=%s WHERE id=%s", (hash_pw, id))
+       mibd.commit()
+       flash("Contraseña actualizada correctamente.")
+       return redirect(url_for('login'))
+   return render_template('reset_password.html')
 
 
 # Ejecución

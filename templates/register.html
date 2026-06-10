@@ -26,6 +26,21 @@
           <input type="password" name="password" class="form-control" required>
         </div>
 
+        <div class="mb-3">
+          <label>Pregunta secreta:</label>
+          <select name="pregunta_secreta" class="form-control" required>
+          <option value="">Selecciona una pregunta</option>
+          <option value="¿Cuál es el nombre de tu primera mascota?">¿Cuál es el nombre de tu primera mascota?</option>
+          <option value="¿En qué ciudad naciste?">¿En qué ciudad naciste?</option>
+          <option value="¿Cuál es el segundo nombre de tu madre?">¿Cuál es el segundo nombre de tu madre?</option>
+          <option value="¿Cuál fue tu primer colegio?">¿Cuál fue tu primer colegio?</option>
+          </select>
+          </div>
+          <div class="mb-3">
+          <label>Respuesta secreta:</label>
+          <input type="text" name="respuesta_secreta" class="form-control" required>
+          </div>
+
         <p class="text-muted small">El registro crea cuentas de tipo cliente. Los roles agente y administrador los asigna un administrador.</p>
 
         <button class="btn btn-galsoft w-100">Crear cuenta</button>
