@@ -2,7 +2,6 @@
 Configuración de correo para el helpdesk.
 Copia mail.env.example a mail.env o define variables de entorno.
 
-Para Gmail: cuenta con contraseña de aplicación, SMTP_PORT=587, SMTP_USE_TLS=1
 """
 import os
 from pathlib import Path

@@ -1,4 +1,4 @@
-#"""Compatibilidad con tabla notificaciones (esquema nuevo o antiguo)."""
+#"""Compatibilidad con tabla notificaciones."""
 
 _COLUMNAS_CACHE = {}
 
