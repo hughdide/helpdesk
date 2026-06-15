@@ -3,15 +3,6 @@
 Sistema web de soporte técnico para gestionar peticiones (tickets) entre clientes, agentes y administradores.
 
 **URL de acceso:** http://127.0.0.1:5000  
-**Código:** repositorio GitHub, rama `main`. Cada persona lo clona en su PC; la ruta local será distinta en cada caso.
-
-**Requisitos para usar el sistema:**
-
-1. Clonar el repositorio y abrir la carpeta raíz en tu equipo (donde está `app.py`).
-2. **MySQL** en marcha con la base de datos `helpdesk` importada desde **`helpdesk.sql`** (phpMyAdmin → Importar).
-3. La aplicación Flask ejecutándose: `python app.py` en esa carpeta.
-
-No hace falta ejecutar scripts SQL adicionales: `helpdesk.sql` ya incluye tablas, relaciones y datos de ejemplo.
 
 ---
 
@@ -36,11 +27,33 @@ Si los datos son correctos, entrará al listado de tickets.
 
 ### 2.2 Registrarse (solo clientes)
 1. En la pantalla de login, pulse **Registrarse**.
-2. Rellene nombre, correo y contraseña.
+2. Rellene **nombre**, **correo** y **contraseña** (mínimo 6 caracteres).
 3. La cuenta se crea con rol **cliente** automáticamente.
 4. Los roles **agente** y **admin** los asigna un administrador.
 
-### 2.3 Cerrar sesión
+### 2.3 Recuperar contraseña olvidada
+
+Si olvidó su contraseña y **no** puede iniciar sesión (requiere correo activo en `mail.env`):
+
+1. En **Iniciar sesión**, pulse **¿Olvidaste tu contraseña?**
+2. Introduzca su **correo electrónico** y pulse **Enviar enlace**.
+3. Revise su bandeja (y carpeta spam): recibirá un correo de Galsoft Helpdesk con un **enlace**.
+4. Abra el enlace (válido **24 horas**) y escriba la **contraseña nueva** dos veces.
+5. Vuelva a **Iniciar sesión** con la nueva contraseña.
+
+| Situación | Qué hacer |
+|-----------|-----------|
+| No llega el correo | Compruebe spam; verifique que el email es el de su cuenta; admin revisa **Notificaciones**. |
+| El enlace caducó | Solicite uno nuevo en **¿Olvidaste tu contraseña?** |
+| El correo no está activo | Contacte al **administrador** (Usuarios → Editar → nueva contraseña). |
+
+### 2.4 Cambiar contraseña (con sesión iniciada)
+
+1. Menú lateral → **Cambiar contraseña**.
+2. Pulse **Enviar enlace a mi correo**.
+3. Abra el enlace del correo y elija la nueva contraseña.
+
+### 2.5 Cerrar sesión
 - Barra superior: botón **Salir**, o menú lateral **Cerrar sesión**.
 
 ---
@@ -140,9 +153,15 @@ Menú **Estadísticas**:
 1. Menú **Usuarios**.
 2. Busque por nombre o correo (opcional).
 3. Pulse **Editar** en un usuario.
-4. Puede cambiar nombre, correo, **rol** (cliente / agente / admin) y contraseña.
+4. Puede cambiar nombre, correo, **rol** (cliente / agente / admin) y **contraseña**.
 
-**Importante:** El correo del cliente debe ser válido para las notificaciones por email.
+Para **restablecer la contraseña** de un usuario que olvidó la respuesta secreta:
+1. **Usuarios → Editar** en ese usuario.
+2. Escriba una **nueva contraseña** en el campo correspondiente (dejar vacío = no cambia).
+3. **Guardar cambios**.
+4. Comunique la contraseña temporal al usuario por un canal seguro (teléfono, en persona, etc.).
+
+**Importante:** El correo del cliente debe ser válido para notificaciones de tickets y para **recuperar/cambiar contraseña** por enlace.
 
 ### 6.2 Categorías
 1. Menú **Categorías**.
@@ -232,7 +251,13 @@ Las fechas se muestran en formato **DD-MM-AAAA HH:MM**.
 Si es **cliente**, solo ve los suyos. Agentes y administradores ven todos.
 
 **¿Por qué el cliente no recibe correos?**  
-Compruebe que tiene email en su ficha, que el comentario no es nota interna y que `mail.env` está activo. Revise **Notificaciones** (admin).
+Compruebe que tiene email en su ficha, que el comentario no es nota interna y que `mail.env` está activo. Revise **Notificaciones** (admin). Los correos de tickets son independientes de recuperar la contraseña.
+
+**¿Olvidé mi contraseña?**  
+Use **¿Olvidaste tu contraseña?** en el login. Recibirá un **correo con enlace** (24 h). Con sesión iniciada también puede usar menú **Cambiar contraseña**.
+
+**¿Por qué no llega el correo de recuperación?**  
+Compruebe `MAIL_ENABLED=1` en `mail.env`, spam, y que el email de la cuenta sea correcto. El admin ve el detalle en **Notificaciones**.
 
 **¿Qué es una nota interna?**  
 Mensaje solo para el equipo de soporte; el cliente no lo ve ni recibe aviso.

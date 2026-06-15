@@ -4,7 +4,8 @@ import os
 import io
 from werkzeug.utils import secure_filename
 from werkzeug.security import check_password_hash, generate_password_hash
-from datetime import datetime
+from datetime import datetime, timedelta
+import secrets
 
 from sla import (
     calcular_limites_sla,
@@ -26,6 +27,61 @@ mibd = mysql.connector.connect(
     database="helpdesk"
 )
 micursor = mibd.cursor(dictionary=True)
+
+RESET_TOKEN_HORAS = 24
+
+
+def _asegurar_columnas_reset():
+    """Añade columnas de token de recuperación si la BD aún no las tiene."""
+    for col, ddl in (
+        ('reset_token', 'ALTER TABLE usuarios ADD COLUMN reset_token VARCHAR(64) NULL'),
+        ('reset_token_expira', 'ALTER TABLE usuarios ADD COLUMN reset_token_expira DATETIME NULL'),
+    ):
+        micursor.execute('SHOW COLUMNS FROM usuarios LIKE %s', (col,))
+        if not micursor.fetchone():
+            micursor.execute(ddl)
+            mibd.commit()
+
+
+def _crear_token_reset(usuario_id):
+    token = secrets.token_urlsafe(32)
+    expira = datetime.now() + timedelta(hours=RESET_TOKEN_HORAS)
+    micursor.execute(
+        'UPDATE usuarios SET reset_token=%s, reset_token_expira=%s WHERE id=%s',
+        (token, expira, usuario_id),
+    )
+    mibd.commit()
+    return token
+
+
+def _usuario_por_token_reset(token):
+    micursor.execute(
+        """SELECT id, nombre, email FROM usuarios
+           WHERE reset_token=%s AND reset_token_expira > NOW()""",
+        (token,),
+    )
+    return micursor.fetchone()
+
+
+def _limpiar_token_reset(usuario_id):
+    micursor.execute(
+        'UPDATE usuarios SET reset_token=NULL, reset_token_expira=NULL WHERE id=%s',
+        (usuario_id,),
+    )
+    mibd.commit()
+
+
+def _enviar_enlace_reset(usuario):
+    if not config_mail.MAIL_ENABLED:
+        return False, 'El correo no está activo (MAIL_ENABLED=0 en mail.env).'
+    if not usuario.get('email'):
+        return False, 'El usuario no tiene correo en su ficha.'
+    token = _crear_token_reset(usuario['id'])
+    mailer.enviar_recuperacion_contrasena(micursor, mibd, usuario, token)
+    return True, None
+
+
+_asegurar_columnas_reset()
 
 # Configuración Flask
 app = Flask(__name__)
@@ -292,6 +348,7 @@ def login():
             session['usuario_id'] = usuario['id']
             session['usuario_nombre'] = usuario['nombre']
             session['usuario_rol'] = usuario['rol']
+            session['usuario_email'] = usuario.get('email', '')
             flash(f"Bienvenido/a, {usuario['nombre']}.")
             return redirect(url_for('index'))
         else:
@@ -310,9 +367,7 @@ def register():
         password = request.form['password']
         rol = 'cliente'
 
-        # Encriptar contraseña
         password_hash = generate_password_hash(password)
-
         sql = "INSERT INTO usuarios (nombre, email, password, rol) VALUES (%s, %s, %s, %s)"
         valores = (nombre, email, password_hash, rol)
 
@@ -356,7 +411,6 @@ def descargar_archivo(id):
         flash("Archivo no encontrado.")
         return redirect(url_for('index'))
     
-# --------------------------------------------------
 
 # Detalle del ticket. Ver información, historial, comentar, tomar ticket y gestionar (agente/admin).
 @app.route("/ticket/<int:id>", methods=['GET', 'POST'])
@@ -606,7 +660,6 @@ def gestionar_categorias():
 
     return render_template('categorias.html', categorias=listar_categorias())
 
-# ------------------------------------------------------------------
 
 # Panel de estadísticas — totales, SLA, gráficos y últimos tickets (agente y administrador).
 @app.route('/dashboard')
@@ -617,67 +670,79 @@ def dashboard():
         flash("Solo agentes y administradores pueden ver estadísticas.")
         return redirect(url_for('index'))
 
-    micursor.execute("SELECT COUNT(*) AS n FROM tickets")
-    total = micursor.fetchone()['n']
+    agente_filtro = request.args.get('agente_id', '').strip()
+    filtro_agente_id = int(agente_filtro) if agente_filtro else None
+    filtro_sql = ''
+    filtro_params = ()
+    if filtro_agente_id:
+        filtro_sql = ' AND agente_id = %s'
+        filtro_params = (filtro_agente_id,)
 
-    micursor.execute("SELECT COUNT(*) AS n FROM tickets WHERE estado='Abierto'")
-    abiertos = micursor.fetchone()['n']
+    def contar(sql, extra_params=()):
+        micursor.execute(sql + filtro_sql, filtro_params + extra_params)
+        return micursor.fetchone()['n']
 
-    micursor.execute("SELECT COUNT(*) AS n FROM tickets WHERE estado='En proceso'")
-    proceso = micursor.fetchone()['n']
-
-    micursor.execute("SELECT COUNT(*) AS n FROM tickets WHERE estado='Cerrado'")
-    cerrados = micursor.fetchone()['n']
-
-    micursor.execute("SELECT COUNT(*) AS n FROM tickets WHERE prioridad='alta' AND estado != 'Cerrado'")
-    alta_abiertos = micursor.fetchone()['n']
-
-    micursor.execute("SELECT COUNT(*) AS n FROM tickets WHERE agente_id IS NULL AND estado != 'Cerrado'")
-    sin_asignar = micursor.fetchone()['n']
-
-    micursor.execute("""
+    total = contar("SELECT COUNT(*) AS n FROM tickets WHERE 1=1")
+    abiertos = contar("SELECT COUNT(*) AS n FROM tickets WHERE estado='Abierto'")
+    proceso = contar("SELECT COUNT(*) AS n FROM tickets WHERE estado='En proceso'")
+    cerrados = contar("SELECT COUNT(*) AS n FROM tickets WHERE estado='Cerrado'")
+    alta_abiertos = contar(
+        "SELECT COUNT(*) AS n FROM tickets WHERE prioridad='alta' AND estado != 'Cerrado'"
+    )
+    sin_asignar = contar(
+        "SELECT COUNT(*) AS n FROM tickets WHERE agente_id IS NULL AND estado != 'Cerrado'"
+    )
+    cerrados_semana = contar("""
         SELECT COUNT(*) AS n FROM tickets
         WHERE estado='Cerrado' AND cerrado_en >= DATE_SUB(NOW(), INTERVAL 7 DAY)
     """)
-    cerrados_semana = micursor.fetchone()['n']
 
     micursor.execute("""
         SELECT a.nombre, COUNT(t.id) AS total
         FROM tickets t
         INNER JOIN usuarios a ON t.agente_id = a.id
         WHERE t.estado != 'Cerrado'
+        """ + (filtro_sql.replace('agente_id', 't.agente_id') if filtro_sql else '') + """
         GROUP BY a.nombre
         ORDER BY total DESC
-    """)
+    """, filtro_params)
     por_agente = micursor.fetchall()
 
-    micursor.execute("""
+    sql_categoria = """
         SELECT cat.nombre, COUNT(t.id) AS total
         FROM tickets t
         LEFT JOIN categorias cat ON t.categoria_id = cat.id
-        GROUP BY cat.nombre
-        ORDER BY total DESC
-    """)
+        WHERE 1=1
+    """
+    if filtro_sql:
+        sql_categoria += filtro_sql.replace('agente_id', 't.agente_id')
+    sql_categoria += " GROUP BY cat.nombre ORDER BY total DESC"
+    micursor.execute(sql_categoria, filtro_params)
     por_categoria = micursor.fetchall()
 
-    micursor.execute("SELECT titulo, creado_en FROM tickets ORDER BY creado_en DESC LIMIT 5")
+    sql_ultimos = "SELECT titulo, creado_en FROM tickets WHERE 1=1"
+    sql_ultimos += filtro_sql + " ORDER BY creado_en DESC LIMIT 5"
+    micursor.execute(sql_ultimos, filtro_params)
     ultimos = micursor.fetchall()
 
+    sla_filtro = filtro_sql.replace('agente_id', 't.agente_id') if filtro_sql else ''
+    sla_params = filtro_params
+
     micursor.execute("""
-        SELECT COUNT(*) AS n FROM tickets
-        WHERE estado != 'Cerrado'
-          AND primera_respuesta_en IS NULL
-          AND sla_respuesta_limite IS NOT NULL
-          AND NOW() > sla_respuesta_limite
-    """)
+        SELECT COUNT(*) AS n FROM tickets t
+        WHERE t.estado != 'Cerrado'
+          AND t.primera_respuesta_en IS NULL
+          AND t.sla_respuesta_limite IS NOT NULL
+          AND NOW() > t.sla_respuesta_limite
+    """ + sla_filtro, sla_params)
     sla_resp_vencidos = micursor.fetchone()['n']
 
     micursor.execute("""
-        SELECT COUNT(*) AS n FROM tickets
-        WHERE estado != 'Cerrado'
-          AND sla_resolucion_limite IS NOT NULL
-          AND NOW() > sla_resolucion_limite
-    """)
+        SELECT COUNT(*) AS n FROM tickets t
+        WHERE t.estado != 'Cerrado'
+          AND t.sla_resolucion_limite IS NOT NULL
+          AND NOW() > t.sla_resolucion_limite
+    """ + sla_filtro, sla_params)
     sla_resol_vencidos = micursor.fetchone()['n']
 
     micursor.execute("""
@@ -688,8 +753,20 @@ def dashboard():
           AND NOW() < t.sla_respuesta_limite
           AND TIMESTAMPDIFF(SECOND, NOW(), t.sla_respuesta_limite)
               <= TIMESTAMPDIFF(SECOND, t.creado_en, t.sla_respuesta_limite) * 0.25
-    """)
+    """ + sla_filtro, sla_params)
     sla_en_riesgo = micursor.fetchone()['n']
+
+    # Gráfico de barras: tickets por agente asignado (todos los estados)
+    micursor.execute("""
+        SELECT COALESCE(a.nombre, 'Sin asignar') AS nombre, COUNT(t.id) AS total
+        FROM tickets t
+        LEFT JOIN usuarios a ON t.agente_id = a.id
+        GROUP BY t.agente_id, a.nombre
+        ORDER BY total DESC
+    """)
+    chart_agentes = micursor.fetchall()
+    agentes = [f['nombre'] for f in chart_agentes]
+    tickets_por_agente = [f['total'] for f in chart_agentes]
 
     return render_template(
         'dashboard.html',
@@ -706,9 +783,11 @@ def dashboard():
         sla_resp_vencidos=sla_resp_vencidos,
         sla_resol_vencidos=sla_resol_vencidos,
         sla_en_riesgo=sla_en_riesgo,
+        agentes=agentes,
+        tickets_por_agente=tickets_por_agente,
+        lista_agentes=listar_agentes(),
+        filtro_agente_id=filtro_agente_id,
     )
-
-# -------------------------------------------------------------
 
 
 # Historial de correos enviados por el sistema (solo administrador).
@@ -762,6 +841,88 @@ def manual_tecnico():
         titulo='Manual técnico',
         contenido_md=texto,
     )
+
+# Recuperar contraseña — envía enlace por correo (sin pregunta secreta).
+@app.route('/olvide', methods=['GET', 'POST'])
+def olvide_contrasena():
+    if request.method == 'POST':
+        if not config_mail.MAIL_ENABLED:
+            flash('El envío de correo no está activo. Contacta con el administrador.')
+            return redirect(url_for('login'))
+
+        email = request.form['email'].strip().lower()
+        micursor.execute(
+            'SELECT id, nombre, email FROM usuarios WHERE email=%s',
+            (email,),
+        )
+        user = micursor.fetchone()
+        if user:
+            _enviar_enlace_reset(user)
+
+        flash(
+            'Si el correo está registrado, recibirás un enlace para restablecer '
+            'la contraseña (revisa también spam). El enlace caduca en 24 horas.'
+        )
+        return redirect(url_for('login'))
+
+    return render_template('olvide_contrasena.html')
+
+
+# Usuario con sesión iniciada — solicita enlace de cambio de contraseña por correo.
+@app.route('/cuenta/cambiar-contrasena', methods=['GET', 'POST'])
+def solicitar_cambio_contrasena():
+    if 'usuario_id' not in session:
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        if not config_mail.MAIL_ENABLED:
+            flash('El envío de correo no está activo. Contacta con el administrador.')
+            return redirect(url_for('index'))
+
+        micursor.execute(
+            'SELECT id, nombre, email FROM usuarios WHERE id=%s',
+            (session['usuario_id'],),
+        )
+        user = micursor.fetchone()
+        ok, err = _enviar_enlace_reset(user) if user else (False, 'Usuario no encontrado.')
+        if ok:
+            flash(
+                f'Se ha enviado un enlace a {user["email"]}. '
+                'Ábrelo para elegir tu nueva contraseña.'
+            )
+        else:
+            flash(err or 'No se pudo enviar el correo.')
+        return redirect(url_for('index'))
+
+    return render_template('solicitar_cambio_contrasena.html', email=session.get('usuario_email', ''))
+
+
+# Restablecer contraseña con token recibido por correo.
+@app.route('/reset/<token>', methods=['GET', 'POST'])
+def reset_password(token):
+    user = _usuario_por_token_reset(token)
+    if not user:
+        flash('El enlace no es válido o ha caducado. Solicita uno nuevo.')
+        return redirect(url_for('olvide_contrasena'))
+
+    if request.method == 'POST':
+        nueva = request.form.get('password', '')
+        confirmar = request.form.get('password_confirm', '')
+        if len(nueva) < 6:
+            flash('La contraseña debe tener al menos 6 caracteres.')
+            return render_template('reset_password.html', token=token)
+        if nueva != confirmar:
+            flash('Las contraseñas no coinciden.')
+            return render_template('reset_password.html', token=token)
+
+        hash_pw = generate_password_hash(nueva)
+        micursor.execute('UPDATE usuarios SET password=%s WHERE id=%s', (hash_pw, user['id']))
+        _limpiar_token_reset(user['id'])
+        mibd.commit()
+        flash('Contraseña actualizada correctamente. Ya puedes iniciar sesión.')
+        return redirect(url_for('login'))
+
+    return render_template('reset_password.html', token=token)
 
 
 # Ejecución

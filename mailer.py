@@ -184,6 +184,25 @@ def on_asignacion(cursor, conn, ticket, nombre_agente, agente_id, agente_email):
               ticket_id=tid, usuario_id=agente_id)
 
 
+def enviar_recuperacion_contrasena(cursor, conn, usuario, token):
+    """Envía enlace para restablecer o cambiar contraseña."""
+    link = f'{cfg.APP_BASE_URL}/reset/{token}'
+    nombre = usuario.get('nombre', '')
+    email = usuario['email']
+    asunto = '[Helpdesk] Restablecer contraseña'
+    cuerpo = (
+        f'Hola {nombre},\n\n'
+        f'Has solicitado restablecer tu contraseña en Galsoft Helpdesk.\n\n'
+        f'Abre este enlace (válido 24 horas):\n{link}\n\n'
+        f'Si no lo solicitaste, ignora este mensaje.\n\n'
+        f'— Galsoft Helpdesk'
+    )
+    notificar(
+        cursor, conn, email, 'recuperar_contrasena', asunto, cuerpo,
+        usuario_id=usuario['id'],
+    )
+
+
 def on_sla_vencido(cursor, conn, ticket, tipo_sla):
     """Aviso a equipo cuando un SLA está vencido (al consultar o actualizar)."""
     asunto = f'[Helpdesk] SLA {tipo_sla} vencido — ticket #{ticket["id"]}'

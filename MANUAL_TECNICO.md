@@ -1,14 +1,5 @@
 # Manual técnico — Galsoft Helpdesk
 
-Documentación para evaluación académica: arquitectura, base de datos, módulos y despliegue.
-
-**Repositorio:** GitHub, rama `main`  
-**Carpeta local:** la ruta depende de cada usuario y de dónde clone el repositorio. Lo importante es entrar en la carpeta donde está `app.py`.  
-**Stack:** Python 3 · Flask · MySQL · Bootstrap 5  
-**URL local:** http://127.0.0.1:5000
-
----
-
 ## 1. Objetivo del sistema
 
 Aplicación web de mesa de ayuda (helpdesk) que permite:
@@ -90,6 +81,8 @@ flowchart TB
 | `email` | VARCHAR | Correo (login único) |
 | `password` | VARCHAR | Hash bcrypt (`werkzeug.security`) |
 | `rol` | VARCHAR | `cliente`, `agente` o `admin` |
+| `reset_token` | VARCHAR(64) NULL | Token para enlace de recuperación de contraseña |
+| `reset_token_expira` | DATETIME NULL | Caducidad del token (24 h) |
 
 #### `tickets`
 
@@ -180,6 +173,9 @@ Cada ruta lleva un comentario `# RUTA:` en el código fuente.
 | `/notificaciones` | Historial de correos | Admin |
 | `/manual/usuario` | Manual de usuario (HTML) | Público |
 | `/manual/tecnico` | Manual técnico (HTML) | Público |
+| `/olvide` | Solicitar enlace de recuperación por correo | Público |
+| `/cuenta/cambiar-contrasena` | Enviar enlace de cambio (usuario logueado) | Autenticado |
+| `/reset/<token>` | Formulario nueva contraseña (token del correo) | Público |
 
 **Sesión Flask** (`session`): `usuario_id`, `usuario_nombre`, `usuario_rol`.
 
@@ -215,7 +211,8 @@ Cada ruta lleva un comentario `# RUTA:` en el código fuente.
 
 | Aspecto | Implementación |
 |---------|----------------|
-| Contraseñas | `generate_password_hash` / `check_password_hash` (Werkzeug) |
+| Contraseñas de acceso | `generate_password_hash` / `check_password_hash` (Werkzeug) en `password` |
+| Recuperación de contraseña | Token `secrets.token_urlsafe(32)` + caducidad 24 h; enlace en correo vía `mailer.enviar_recuperacion_contrasena` |
 | SQL injection | Consultas parametrizadas con `%s` y tuplas de valores |
 | Archivos | `secure_filename` en subida; almacenamiento en BLOB |
 | Autorización | Comprobación de `session` y `usuario_rol` en cada ruta sensible |
@@ -234,7 +231,7 @@ Cada ruta lleva un comentario `# RUTA:` en el código fuente.
 - **Filtro Jinja `fecha_es`:** formato `DD-MM-AAAA HH:MM`.
 - **Paleta:** verde (ok/abierto/baja), amarillo (proceso/media/riesgo), rojo (cerrado/alta/vencido).
 
-Plantillas principales: `base.html`, `index.html`, `ticket_detalle.html`, `dashboard.html`, `login.html`, `register.html`, `new_ticket.html`, `usuarios.html`, `editar_usuario.html`, `categorias.html`, `notificaciones.html`, `manual_view.html`.
+Plantillas principales: `base.html`, `index.html`, `ticket_detalle.html`, `dashboard.html`, `login.html`, `register.html`, `olvide_contrasena.html`, `reset_password.html`, `solicitar_cambio_contrasena.html`, `new_ticket.html`, `usuarios.html`, `editar_usuario.html`, `categorias.html`, `notificaciones.html`, `manual_view.html`.
 
 ---
 
@@ -316,6 +313,22 @@ Abrir http://127.0.0.1:5000
 1. Estado `Cerrado`, `cerrado_en = NOW()`.
 2. Historial + correo al cliente.
 
+### 10.5 Registro de usuario (cliente)
+
+1. POST `/register` → `generate_password_hash(password)`.
+2. INSERT en `usuarios` (nombre, email, password, rol=`cliente`).
+
+### 10.6 Recuperación y cambio de contraseña por correo
+
+Requiere `MAIL_ENABLED=1` y `mail.env` configurado (IONOS, etc.):
+
+1. **POST `/olvide`** — Usuario introduce email. Si existe, genera token, guarda `reset_token` + `reset_token_expira` y envía correo con enlace `{APP_BASE_URL}/reset/{token}`.
+2. **POST `/cuenta/cambiar-contrasena`** — Usuario logueado; mismo mecanismo al email de su ficha.
+3. **GET/POST `/reset/<token>`** — Valida token no caducado; POST actualiza `password` y borra token.
+4. Mensaje genérico en `/olvide` (no revela si el email existe).
+
+**Administrador:** POST `/usuario/editar/<id>` con `password` no vacío sigue permitiendo asignar contraseña manualmente.
+
 ---
 
 ## 11. Consultas SQL destacadas
@@ -333,20 +346,11 @@ Abrir http://127.0.0.1:5000
 - `secret_key` aleatoria reinicia sesiones al reiniciar Flask.
 - Adjuntos en BLOB (no escalable para ficheros muy grandes).
 - Sin API REST ni websockets; interfaz 100 % servidor-renderizada.
-- Correo depende de credenciales SMTP externas (`mail.env`).
+- Correo depende de credenciales SMTP en `mail.env`; la recuperación de contraseña **requiere** `MAIL_ENABLED=1`.
+- Tokens de reset caducan a las 24 horas y se invalidan al usarse.
 
 ---
 
-## 13. Referencias para evaluación
-
-| Documento | Audiencia |
-|-----------|-----------|
-| `MANUAL_USUARIO.md` | Usuarios finales (cliente, agente, admin) |
-| `MANUAL_TECNICO.md` | Revisión técnica |
-| `helpdesk.sql` | Volcado completo de la base de datos |
-| Comentarios `# RUTA:` y `# FUNCIÓN:` en `app.py` | Mapa rápido del código |
-
----
 
 **Ver en la aplicación:** http://127.0.0.1:5000/manual/tecnico (también desde el pie de página).
 
