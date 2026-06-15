@@ -4,7 +4,8 @@ import os
 import io
 from werkzeug.utils import secure_filename
 from werkzeug.security import check_password_hash, generate_password_hash
-from datetime import datetime
+from datetime import datetime, timedelta
+import secrets
 
 from sla import (
     calcular_limites_sla,
@@ -26,6 +27,61 @@ mibd = mysql.connector.connect(
     database="helpdesk"
 )
 micursor = mibd.cursor(dictionary=True)
+
+RESET_TOKEN_HORAS = 24
+
+
+def _asegurar_columnas_reset():
+    """Añade columnas de token de recuperación si la BD aún no las tiene."""
+    for col, ddl in (
+        ('reset_token', 'ALTER TABLE usuarios ADD COLUMN reset_token VARCHAR(64) NULL'),
+        ('reset_token_expira', 'ALTER TABLE usuarios ADD COLUMN reset_token_expira DATETIME NULL'),
+    ):
+        micursor.execute('SHOW COLUMNS FROM usuarios LIKE %s', (col,))
+        if not micursor.fetchone():
+            micursor.execute(ddl)
+            mibd.commit()
+
+
+def _crear_token_reset(usuario_id):
+    token = secrets.token_urlsafe(32)
+    expira = datetime.now() + timedelta(hours=RESET_TOKEN_HORAS)
+    micursor.execute(
+        'UPDATE usuarios SET reset_token=%s, reset_token_expira=%s WHERE id=%s',
+        (token, expira, usuario_id),
+    )
+    mibd.commit()
+    return token
+
+
+def _usuario_por_token_reset(token):
+    micursor.execute(
+        """SELECT id, nombre, email FROM usuarios
+           WHERE reset_token=%s AND reset_token_expira > NOW()""",
+        (token,),
+    )
+    return micursor.fetchone()
+
+
+def _limpiar_token_reset(usuario_id):
+    micursor.execute(
+        'UPDATE usuarios SET reset_token=NULL, reset_token_expira=NULL WHERE id=%s',
+        (usuario_id,),
+    )
+    mibd.commit()
+
+
+def _enviar_enlace_reset(usuario):
+    if not config_mail.MAIL_ENABLED:
+        return False, 'El correo no está activo (MAIL_ENABLED=0 en mail.env).'
+    if not usuario.get('email'):
+        return False, 'El usuario no tiene correo en su ficha.'
+    token = _crear_token_reset(usuario['id'])
+    mailer.enviar_recuperacion_contrasena(micursor, mibd, usuario, token)
+    return True, None
+
+
+_asegurar_columnas_reset()
 
 # Configuración Flask
 app = Flask(__name__)
@@ -292,6 +348,7 @@ def login():
             session['usuario_id'] = usuario['id']
             session['usuario_nombre'] = usuario['nombre']
             session['usuario_rol'] = usuario['rol']
+            session['usuario_email'] = usuario.get('email', '')
             flash(f"Bienvenido/a, {usuario['nombre']}.")
             return redirect(url_for('index'))
         else:
@@ -310,14 +367,9 @@ def register():
         password = request.form['password']
         rol = 'cliente'
 
-        # Encriptar contraseña
         password_hash = generate_password_hash(password)
-        pregunta = request.form['pregunta_secreta']
-        respuesta = request.form['respuesta_secreta'].strip()
-        hash_respuesta = generate_password_hash(respuesta)
-
-        sql = "INSERT INTO usuarios (nombre, email, password, rol, pregunta_secreta, respuesta_secreta) VALUES (%s, %s, %s, %s, %s, %s)"
-        valores = (nombre, email, password_hash, rol, pregunta, hash_respuesta)
+        sql = "INSERT INTO usuarios (nombre, email, password, rol) VALUES (%s, %s, %s, %s)"
+        valores = (nombre, email, password_hash, rol)
 
         try:
             micursor.execute(sql, valores)
@@ -790,51 +842,87 @@ def manual_tecnico():
         contenido_md=texto,
     )
 
-# ***************************************************
-# pregunta secreta
+# Recuperar contraseña — envía enlace por correo (sin pregunta secreta).
 @app.route('/olvide', methods=['GET', 'POST'])
 def olvide_contrasena():
-   if request.method == 'POST':
-       email = request.form['email'].strip()
-       micursor.execute("SELECT id, pregunta_secreta FROM usuarios WHERE email=%s", (email,))
-       user = micursor.fetchone()
-       if not user:
-           flash("No existe un usuario con ese correo.")
-           return redirect(url_for('olvide_contrasena'))
-       return redirect(url_for('pregunta_secreta', id=user['id']))
-   return render_template('olvide_contrasena.html')
+    if request.method == 'POST':
+        if not config_mail.MAIL_ENABLED:
+            flash('El envío de correo no está activo. Contacta con el administrador.')
+            return redirect(url_for('login'))
 
-# Ruta para mostrar preguntas secretas
-@app.route('/pregunta/<int:id>', methods=['GET', 'POST'])
-def pregunta_secreta(id):
-   micursor.execute("SELECT pregunta_secreta FROM usuarios WHERE id=%s", (id,))
-   user = micursor.fetchone()
-   if not user:
-       flash("Usuario no encontrado.")
-       return redirect(url_for('login'))
-   if request.method == 'POST':
-       respuesta = request.form['respuesta'].strip()
-       micursor.execute("SELECT respuesta_secreta FROM usuarios WHERE id=%s", (id,))
-       fila = micursor.fetchone()
-       # Comparar hash
-       if check_password_hash(fila['respuesta_secreta'], respuesta):
-           return redirect(url_for('reset_password', id=id))
-       else:
-           flash("Respuesta incorrecta.")
-           return redirect(url_for('pregunta_secreta', id=id))
-   return render_template('pregunta_secreta.html', pregunta=user['pregunta_secreta'])
+        email = request.form['email'].strip().lower()
+        micursor.execute(
+            'SELECT id, nombre, email FROM usuarios WHERE email=%s',
+            (email,),
+        )
+        user = micursor.fetchone()
+        if user:
+            _enviar_enlace_reset(user)
 
-# cambiar contraseña
-@app.route('/reset/<int:id>', methods=['GET', 'POST'])
-def reset_password(id):
-   if request.method == 'POST':
-       nueva = request.form['password']
-       hash_pw = generate_password_hash(nueva)
-       micursor.execute("UPDATE usuarios SET password=%s WHERE id=%s", (hash_pw, id))
-       mibd.commit()
-       flash("Contraseña actualizada correctamente.")
-       return redirect(url_for('login'))
-   return render_template('reset_password.html')
+        flash(
+            'Si el correo está registrado, recibirás un enlace para restablecer '
+            'la contraseña (revisa también spam). El enlace caduca en 24 horas.'
+        )
+        return redirect(url_for('login'))
+
+    return render_template('olvide_contrasena.html')
+
+
+# Usuario con sesión iniciada — solicita enlace de cambio de contraseña por correo.
+@app.route('/cuenta/cambiar-contrasena', methods=['GET', 'POST'])
+def solicitar_cambio_contrasena():
+    if 'usuario_id' not in session:
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        if not config_mail.MAIL_ENABLED:
+            flash('El envío de correo no está activo. Contacta con el administrador.')
+            return redirect(url_for('index'))
+
+        micursor.execute(
+            'SELECT id, nombre, email FROM usuarios WHERE id=%s',
+            (session['usuario_id'],),
+        )
+        user = micursor.fetchone()
+        ok, err = _enviar_enlace_reset(user) if user else (False, 'Usuario no encontrado.')
+        if ok:
+            flash(
+                f'Se ha enviado un enlace a {user["email"]}. '
+                'Ábrelo para elegir tu nueva contraseña.'
+            )
+        else:
+            flash(err or 'No se pudo enviar el correo.')
+        return redirect(url_for('index'))
+
+    return render_template('solicitar_cambio_contrasena.html', email=session.get('usuario_email', ''))
+
+
+# Restablecer contraseña con token recibido por correo.
+@app.route('/reset/<token>', methods=['GET', 'POST'])
+def reset_password(token):
+    user = _usuario_por_token_reset(token)
+    if not user:
+        flash('El enlace no es válido o ha caducado. Solicita uno nuevo.')
+        return redirect(url_for('olvide_contrasena'))
+
+    if request.method == 'POST':
+        nueva = request.form.get('password', '')
+        confirmar = request.form.get('password_confirm', '')
+        if len(nueva) < 6:
+            flash('La contraseña debe tener al menos 6 caracteres.')
+            return render_template('reset_password.html', token=token)
+        if nueva != confirmar:
+            flash('Las contraseñas no coinciden.')
+            return render_template('reset_password.html', token=token)
+
+        hash_pw = generate_password_hash(nueva)
+        micursor.execute('UPDATE usuarios SET password=%s WHERE id=%s', (hash_pw, user['id']))
+        _limpiar_token_reset(user['id'])
+        mibd.commit()
+        flash('Contraseña actualizada correctamente. Ya puedes iniciar sesión.')
+        return redirect(url_for('login'))
+
+    return render_template('reset_password.html', token=token)
 
 
 # Ejecución

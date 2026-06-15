@@ -27,43 +27,33 @@ Si los datos son correctos, entrará al listado de tickets.
 
 ### 2.2 Registrarse (solo clientes)
 1. En la pantalla de login, pulse **Registrarse**.
-2. Rellene:
-   - **Nombre completo**
-   - **Correo electrónico**
-   - **Contraseña**
-   - **Pregunta secreta** — Elija una de la lista desplegable.
-   - **Respuesta secreta** — Respuesta que solo usted debe recordar (no distingue mayúsculas/minúsculas al verificar).
+2. Rellene **nombre**, **correo** y **contraseña** (mínimo 6 caracteres).
 3. La cuenta se crea con rol **cliente** automáticamente.
 4. Los roles **agente** y **admin** los asigna un administrador.
 
-**Preguntas secretas disponibles al registrarse:**
-- ¿Cuál es el nombre de tu primera mascota?
-- ¿En qué ciudad naciste?
-- ¿Cuál es el segundo nombre de tu madre?
-- ¿Cuál fue tu primer colegio?
-
-Guarde la **pregunta y la respuesta** que eligió: las necesitará si olvida la contraseña. El sistema **no envía correos** para restablecer la clave; la recuperación es por pregunta secreta.
-
 ### 2.3 Recuperar contraseña olvidada
 
-Si olvidó su contraseña y **no** puede iniciar sesión:
+Si olvidó su contraseña y **no** puede iniciar sesión (requiere correo activo en `mail.env`):
 
-1. En la pantalla de **Iniciar sesión**, pulse **¿Olvidaste tu contraseña?**
-2. Introduzca su **correo electrónico** (el de su cuenta) y pulse **Continuar**.
-3. Si el correo existe, verá su **pregunta secreta**.
-4. Escriba la **respuesta secreta** exactamente como la registró (espacios al inicio/final se ignoran).
-5. Si la respuesta es correcta, podrá escribir una **contraseña nueva**.
-6. Pulse guardar y vuelva a **Iniciar sesión** con la nueva contraseña.
+1. En **Iniciar sesión**, pulse **¿Olvidaste tu contraseña?**
+2. Introduzca su **correo electrónico** y pulse **Enviar enlace**.
+3. Revise su bandeja (y carpeta spam): recibirá un correo de Galsoft Helpdesk con un **enlace**.
+4. Abra el enlace (válido **24 horas**) y escriba la **contraseña nueva** dos veces.
+5. Vuelva a **Iniciar sesión** con la nueva contraseña.
 
 | Situación | Qué hacer |
 |-----------|-----------|
-| No recuerda la respuesta secreta | Contacte con el **administrador** para que le asigne una contraseña nueva (menú Usuarios → Editar). |
-| El correo no está registrado | Compruebe el email o regístrese si aún no tiene cuenta. |
-| Cuenta antigua sin pregunta secreta | El administrador debe asignarle una contraseña desde **Usuarios → Editar**. |
+| No llega el correo | Compruebe spam; verifique que el email es el de su cuenta; admin revisa **Notificaciones**. |
+| El enlace caducó | Solicite uno nuevo en **¿Olvidaste tu contraseña?** |
+| El correo no está activo | Contacte al **administrador** (Usuarios → Editar → nueva contraseña). |
 
-**Importante:** La respuesta secreta se guarda de forma segura (cifrada) en la base de datos; nadie puede leerla en texto plano, ni siquiera el administrador.
+### 2.4 Cambiar contraseña (con sesión iniciada)
 
-### 2.4 Cerrar sesión
+1. Menú lateral → **Cambiar contraseña**.
+2. Pulse **Enviar enlace a mi correo**.
+3. Abra el enlace del correo y elija la nueva contraseña.
+
+### 2.5 Cerrar sesión
 - Barra superior: botón **Salir**, o menú lateral **Cerrar sesión**.
 
 ---
@@ -171,7 +161,7 @@ Para **restablecer la contraseña** de un usuario que olvidó la respuesta secre
 3. **Guardar cambios**.
 4. Comunique la contraseña temporal al usuario por un canal seguro (teléfono, en persona, etc.).
 
-**Importante:** El correo del cliente debe ser válido si se usan notificaciones por email de tickets. La recuperación de contraseña **no** usa correo electrónico; usa la pregunta secreta definida al registrarse.
+**Importante:** El correo del cliente debe ser válido para notificaciones de tickets y para **recuperar/cambiar contraseña** por enlace.
 
 ### 6.2 Categorías
 1. Menú **Categorías**.
@@ -263,11 +253,11 @@ Si es **cliente**, solo ve los suyos. Agentes y administradores ven todos.
 **¿Por qué el cliente no recibe correos?**  
 Compruebe que tiene email en su ficha, que el comentario no es nota interna y que `mail.env` está activo. Revise **Notificaciones** (admin). Los correos de tickets son independientes de recuperar la contraseña.
 
-**¿Olvidé mi contraseña y no tengo correo de recuperación?**  
-El sistema **no envía enlaces por email**. Use **¿Olvidaste tu contraseña?** en el login y responda su **pregunta secreta**. Si no la recuerda, pida al administrador que le ponga una contraseña nueva.
+**¿Olvidé mi contraseña?**  
+Use **¿Olvidaste tu contraseña?** en el login. Recibirá un **correo con enlace** (24 h). Con sesión iniciada también puede usar menú **Cambiar contraseña**.
 
-**¿Para qué sirve la pregunta secreta?**  
-Solo para **recuperar la contraseña** si la olvida. Debe elegirla al registrarse y recordar la respuesta.
+**¿Por qué no llega el correo de recuperación?**  
+Compruebe `MAIL_ENABLED=1` en `mail.env`, spam, y que el email de la cuenta sea correcto. El admin ve el detalle en **Notificaciones**.
 
 **¿Qué es una nota interna?**  
 Mensaje solo para el equipo de soporte; el cliente no lo ve ni recibe aviso.

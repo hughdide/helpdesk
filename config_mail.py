@@ -9,11 +9,11 @@ from pathlib import Path
 
 _env_file = Path(__file__).parent / 'mail.env'
 if _env_file.exists():
-    for line in _env_file.read_text(encoding='utf-8').splitlines():
+    for line in _env_file.read_text(encoding='utf-8-sig').splitlines():
         line = line.strip()
         if line and not line.startswith('#') and '=' in line:
             k, v = line.split('=', 1)
-            os.environ.setdefault(k.strip(), v.strip())
+            os.environ[k.strip()] = v.strip()
 
 MAIL_ENABLED = os.environ.get('MAIL_ENABLED', '0').strip() in ('1', 'true', 'yes')
 SMTP_HOST = os.environ.get('SMTP_HOST', 'smtp.gmail.com')
