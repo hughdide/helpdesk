@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% block title %}Notificaciones · Galsoft Helpdesk{% endblock %}
+{% block content %}
+
+<h3 class="mb-3">Historial de notificaciones por correo</h3>
+
+{% if mail_habilitado %}
+<p class="text-success small">Correo activo (MAIL_ENABLED=1 en mail.env).</p>
+{% else %}
+<p class="text-warning small">
+  Correo desactivado. Copia <code>mail.env.example</code> a <code>mail.env</code> y configura SMTP.
+  Los avisos se registran aquí aunque no se envíen.
+</p>
+{% endif %}
+
+<div class="table-responsive card card-soft p-0">
+  <table class="table table-sm mb-0">
+    <thead class="table-light">
+      <tr>
+        <th>Fecha</th>
+        <th>Tipo</th>
+        <th>Email</th>
+        <th>Asunto</th>
+        <th>Ticket</th>
+        <th>Estado</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for n in notificaciones %}
+      <tr>
+        <td class="small text-muted">{{ n.creado_en }}</td>
+        <td><span class="badge bg-light text-dark border">{{ n.tipo }}</span></td>
+        <td>{{ n.email }}</td>
+        <td>{{ n.asunto }}</td>
+        <td>
+          {% if n.ticket_id %}
+          <a href="{{ url_for('ticket_detalle', id=n.ticket_id) }}">#{{ n.ticket_id }}</a>
+          {% else %}—{% endif %}
+        </td>
+        <td>
+          {% if n.enviado %}
+          <span class="text-success">Enviado</span>
+          {% else %}
+          <span class="text-danger" title="{{ n.error_msg or '' }}">No enviado</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="text-center text-muted py-4">Sin registros.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<a href="{{ url_for('index') }}" class="btn btn-outline-secondary mt-3">Volver</a>
+
+{% endblock %}

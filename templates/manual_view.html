@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}{{ titulo }} — Galsoft Helpdesk{% endblock %}
+{% block content %}
+<div class="manual-doc mb-4">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <h1 class="h3 mb-0">{{ titulo }}</h1>
+    <div class="d-flex gap-2 small">
+      <a href="{{ url_for('manual_usuario') }}" class="btn btn-outline-primary btn-sm">Manual de usuario</a>
+      <a href="{{ url_for('manual_tecnico') }}" class="btn btn-outline-secondary btn-sm">Manual técnico</a>
+    </div>
+  </div>
+  <article id="manual-contenido" class="manual-contenido"></article>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'loose' });
+  marked.setOptions({ gfm: true, breaks: false });
+
+  document.getElementById('manual-contenido').innerHTML =
+    marked.parse({{ contenido_md|tojson }});
+
+  document.querySelectorAll('pre code.language-mermaid').forEach(function (block) {
+    const div = document.createElement('div');
+    div.className = 'mermaid';
+    div.textContent = block.textContent;
+    block.parentElement.replaceWith(div);
+  });
+
+  mermaid.run({ querySelector: '.manual-contenido .mermaid' });
+</script>
+{% endblock %}
