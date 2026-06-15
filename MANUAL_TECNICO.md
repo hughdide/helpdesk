@@ -3,7 +3,7 @@
 Documentación para evaluación académica: arquitectura, base de datos, módulos y despliegue.
 
 **Repositorio:** GitHub, rama `main`  
-**Carpeta local:** la ruta depende de cada usuario y de dónde clone el repositorio. Lo importante es entrar en la carpeta donde está `app.py`.  
+**Carpeta local:** Entrar en la carpeta donde está `app.py`.  
 **Stack:** Python 3 · Flask · MySQL · Bootstrap 5  
 **URL local:** http://127.0.0.1:5000
 
@@ -90,6 +90,10 @@ flowchart TB
 | `email` | VARCHAR | Correo (login único) |
 | `password` | VARCHAR | Hash bcrypt (`werkzeug.security`) |
 | `rol` | VARCHAR | `cliente`, `agente` o `admin` |
+| `pregunta_secreta` | VARCHAR | Texto de la pregunta elegida al registrarse (recuperación de contraseña) |
+| `respuesta_secreta` | VARCHAR | Hash de la respuesta (`generate_password_hash`); no se almacena en claro |
+
+
 
 #### `tickets`
 
@@ -180,6 +184,9 @@ Cada ruta lleva un comentario `# RUTA:` en el código fuente.
 | `/notificaciones` | Historial de correos | Admin |
 | `/manual/usuario` | Manual de usuario (HTML) | Público |
 | `/manual/tecnico` | Manual técnico (HTML) | Público |
+| `/olvide` | Solicitar recuperación por correo (paso 1) | Público |
+| `/pregunta/<id>` | Mostrar pregunta secreta y validar respuesta | Público |
+| `/reset/<id>` | Establecer contraseña nueva tras validar respuesta | Público |
 
 **Sesión Flask** (`session`): `usuario_id`, `usuario_nombre`, `usuario_rol`.
 
@@ -215,7 +222,9 @@ Cada ruta lleva un comentario `# RUTA:` en el código fuente.
 
 | Aspecto | Implementación |
 |---------|----------------|
-| Contraseñas | `generate_password_hash` / `check_password_hash` (Werkzeug) |
+| Contraseñas de acceso | `generate_password_hash` / `check_password_hash` (Werkzeug) en `password` |
+| Respuesta secreta | Mismo algoritmo de hash en `respuesta_secreta`; comparación con `check_password_hash` |
+| Recuperación sin email | Flujo `/olvide` → `/pregunta/<id>` → `/reset/<id>` (no depende de SMTP) |
 | SQL injection | Consultas parametrizadas con `%s` y tuplas de valores |
 | Archivos | `secure_filename` en subida; almacenamiento en BLOB |
 | Autorización | Comprobación de `session` y `usuario_rol` en cada ruta sensible |
@@ -234,7 +243,7 @@ Cada ruta lleva un comentario `# RUTA:` en el código fuente.
 - **Filtro Jinja `fecha_es`:** formato `DD-MM-AAAA HH:MM`.
 - **Paleta:** verde (ok/abierto/baja), amarillo (proceso/media/riesgo), rojo (cerrado/alta/vencido).
 
-Plantillas principales: `base.html`, `index.html`, `ticket_detalle.html`, `dashboard.html`, `login.html`, `register.html`, `new_ticket.html`, `usuarios.html`, `editar_usuario.html`, `categorias.html`, `notificaciones.html`, `manual_view.html`.
+Plantillas principales: `base.html`, `index.html`, `ticket_detalle.html`, `dashboard.html`, `login.html`, `register.html`, `olvide_contrasena.html`, `pregunta_secreta.html`, `reset_password.html`, `new_ticket.html`, `usuarios.html`, `editar_usuario.html`, `categorias.html`, `notificaciones.html`, `manual_view.html`.
 
 ---
 
@@ -316,6 +325,25 @@ Abrir http://127.0.0.1:5000
 1. Estado `Cerrado`, `cerrado_en = NOW()`.
 2. Historial + correo al cliente.
 
+### 10.5 Registro de usuario (cliente)
+
+1. POST `/register` → `generate_password_hash(password)` y `generate_password_hash(respuesta_secreta)`.
+2. INSERT en `usuarios` con `pregunta_secreta` (texto) y `respuesta_secreta` (hash).
+3. Rol fijo: `cliente`.
+
+Preguntas predefinidas en `register.html` (select con cuatro opciones).
+
+### 10.6 Recuperación de contraseña (pregunta secreta)
+
+Alternativa al envío de correo (útil cuando `MAIL_ENABLED=0` o sin SMTP de recuperación):
+
+1. **GET/POST `/olvide`** — El usuario introduce `email`. Si existe, redirige a `/pregunta/<id>`.
+2. **GET/POST `/pregunta/<id>`** — Muestra `pregunta_secreta` del usuario. POST compara `respuesta` con `check_password_hash(respuesta_secreta, respuesta_formulario)`.
+3. Si es correcta → **GET/POST `/reset/<id>`** — Nueva contraseña con hash y UPDATE en `usuarios.password`.
+4. Si es incorrecta → flash y vuelta a la pregunta.
+
+**Administrador:** POST `/usuario/editar/<id>` con campo `password` no vacío → `generate_password_hash` y UPDATE (respaldo si el usuario olvida la respuesta secreta).
+
 ---
 
 ## 11. Consultas SQL destacadas
@@ -337,16 +365,6 @@ Abrir http://127.0.0.1:5000
 
 ---
 
-## 13. Referencias para evaluación
-
-| Documento | Audiencia |
-|-----------|-----------|
-| `MANUAL_USUARIO.md` | Usuarios finales (cliente, agente, admin) |
-| `MANUAL_TECNICO.md` | Revisión técnica |
-| `helpdesk.sql` | Volcado completo de la base de datos |
-| Comentarios `# RUTA:` y `# FUNCIÓN:` en `app.py` | Mapa rápido del código |
-
----
 
 **Ver en la aplicación:** http://127.0.0.1:5000/manual/tecnico (también desde el pie de página).
 
