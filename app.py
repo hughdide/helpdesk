@@ -31,18 +31,6 @@ micursor = mibd.cursor(dictionary=True)
 RESET_TOKEN_HORAS = 24
 
 
-def _asegurar_columnas_reset():
-    """Añade columnas de token de recuperación si la BD aún no las tiene."""
-    for col, ddl in (
-        ('reset_token', 'ALTER TABLE usuarios ADD COLUMN reset_token VARCHAR(64) NULL'),
-        ('reset_token_expira', 'ALTER TABLE usuarios ADD COLUMN reset_token_expira DATETIME NULL'),
-    ):
-        micursor.execute('SHOW COLUMNS FROM usuarios LIKE %s', (col,))
-        if not micursor.fetchone():
-            micursor.execute(ddl)
-            mibd.commit()
-
-
 def _crear_token_reset(usuario_id):
     token = secrets.token_urlsafe(32)
     expira = datetime.now() + timedelta(hours=RESET_TOKEN_HORAS)
@@ -79,9 +67,6 @@ def _enviar_enlace_reset(usuario):
     token = _crear_token_reset(usuario['id'])
     mailer.enviar_recuperacion_contrasena(micursor, mibd, usuario, token)
     return True, None
-
-
-_asegurar_columnas_reset()
 
 # Configuración Flask
 app = Flask(__name__)
@@ -137,7 +122,7 @@ def registrar_historial(ticket_id, usuario_id, tipo, detalle, es_interno=0):
 
 # Devuelve todas las categorías ordenadas por nombre (formularios y filtros).
 def listar_categorias():
-    sql = "SELECT id, nombre FROM categorias ORDER BY nombre ASC"
+    sql = "SELECT id, nombre FROM categorias ORDER BY id ASC"
     micursor.execute(sql)
     return micursor.fetchall()
 
@@ -638,6 +623,35 @@ def editar_usuario(id):
     return render_template('editar_usuario.html', usuario=usuario)
 
 
+# Eliminar usuario (solo administrador).
+@app.route('/usuario/eliminar/<int:id>', methods=['POST'])
+def eliminar_usuario(id):
+    if 'usuario_id' not in session:
+        return redirect(url_for('login'))
+    if session.get('usuario_rol') != 'admin':
+        flash("Solo administradores pueden eliminar usuarios.")
+        return redirect(url_for('index'))
+
+    if id == session.get('usuario_id'):
+        flash("No puedes eliminar tu propio usuario mientras tienes sesión iniciada.")
+        return redirect(url_for('listar_usuarios'))
+
+    micursor.execute("SELECT id, nombre FROM usuarios WHERE id = %s", (id,))
+    usuario = micursor.fetchone()
+    if not usuario:
+        flash("Usuario no encontrado.")
+        return redirect(url_for('listar_usuarios'))
+
+    try:
+        micursor.execute("DELETE FROM usuarios WHERE id = %s", (id,))
+        mibd.commit()
+        flash(f"Usuario '{usuario['nombre']}' eliminado correctamente.")
+    except mysql.connector.Error:
+        flash("No se pudo eliminar el usuario.")
+
+    return redirect(url_for('listar_usuarios'))
+
+
 # Gestionar categorías de tickets — listar y crear nuevas (solo administrador).
 @app.route('/categorias', methods=['GET', 'POST'])
 def gestionar_categorias():
@@ -842,7 +856,7 @@ def manual_tecnico():
         contenido_md=texto,
     )
 
-# Recuperar contraseña — envía enlace por correo (sin pregunta secreta).
+# Recuperar contraseña — envía enlace por correo
 @app.route('/olvide', methods=['GET', 'POST'])
 def olvide_contrasena():
     if request.method == 'POST':

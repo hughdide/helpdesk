@@ -98,7 +98,7 @@ def _estado_plazo_con_inicio(ahora, inicio, limite, cumplido_en):
 
 
 def evaluar_sla(ticket):
-    """Devuelve dict con estados de respuesta y resolución para plantillas."""
+    """Devuelve diccionario con estados de respuesta y resolución para plantillas."""
     ahora = datetime.now()
     prioridad = _normalizar_prioridad(ticket.get('prioridad'))
     h_resp, h_resol = SLA_HORAS[prioridad]

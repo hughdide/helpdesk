@@ -70,6 +70,7 @@ Si olvidó su contraseña y **no** puede iniciar sesión (requiere correo activo
 - **Usuarios** — Gestión de cuentas (solo admin).
 - **Categorías** — Tipos de ticket (solo admin).
 - **Notificaciones** — Historial de correos enviados (solo admin).
+- **Cambiar contraseña** — Envía enlace al correo del usuario logueado.
 
 ### Cabecera
 - Logo Galsoft y nombre del usuario con su rol.
@@ -154,12 +155,15 @@ Menú **Estadísticas**:
 2. Busque por nombre o correo (opcional).
 3. Pulse **Editar** en un usuario.
 4. Puede cambiar nombre, correo, **rol** (cliente / agente / admin) y **contraseña**.
+5. También puede pulsar **Eliminar** (en listado o edición), confirmar y borrar el usuario.
 
-Para **restablecer la contraseña** de un usuario que olvidó la respuesta secreta:
+Para **restablecer la contraseña** de un usuario:
 1. **Usuarios → Editar** en ese usuario.
 2. Escriba una **nueva contraseña** en el campo correspondiente (dejar vacío = no cambia).
 3. **Guardar cambios**.
 4. Comunique la contraseña temporal al usuario por un canal seguro (teléfono, en persona, etc.).
+
+Al eliminar, el sistema pide confirmación. No se puede deshacer.
 
 **Importante:** El correo del cliente debe ser válido para notificaciones de tickets y para **recuperar/cambiar contraseña** por enlace.
 

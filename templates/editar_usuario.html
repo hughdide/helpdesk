@@ -31,7 +31,17 @@
 
     <button class="btn btn-galsoft">Guardar cambios</button>
     <a href="{{ url_for('listar_usuarios') }}" class="btn btn-outline-secondary">Volver</a>
+    {% if usuario.id != session.get('usuario_id') %}
+    <button type="submit" form="form-eliminar-usuario" class="btn btn-outline-danger"
+            onclick="return confirm('¿Seguro que quieres eliminar este usuario? Esta acción no se puede deshacer.');">
+      Eliminar
+    </button>
+    {% endif %}
   </form>
+
+  {% if usuario.id != session.get('usuario_id') %}
+  <form id="form-eliminar-usuario" method="post" action="{{ url_for('eliminar_usuario', id=usuario.id) }}"></form>
+  {% endif %}
 </div>
 
 {% endblock %}

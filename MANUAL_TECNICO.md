@@ -168,6 +168,7 @@ Cada ruta lleva un comentario `# RUTA:` en el código fuente.
 | `/ticket/<id>` | Detalle, comentarios, gestión | Según rol |
 | `/usuarios` | Listado usuarios | Admin |
 | `/usuario/editar/<id>` | Editar usuario | Admin |
+| `/usuario/eliminar/<id>` | Eliminar usuario (POST con confirmación UI) | Admin |
 | `/categorias` | CRUD categorías | Admin |
 | `/dashboard` | Estadísticas y SLA | Agente, admin |
 | `/notificaciones` | Historial de correos | Admin |
@@ -218,8 +219,6 @@ Cada ruta lleva un comentario `# RUTA:` en el código fuente.
 | Autorización | Comprobación de `session` y `usuario_rol` en cada ruta sensible |
 | Notas internas | Filtro `es_interno = 0` en historial para clientes |
 | Tickets cliente | `WHERE t.usuario_id = %s` en consultas de detalle/listado |
-
-**Pendiente para producción:** HTTPS, variables de entorno para BD, `secret_key` fija, rate limiting, CSRF en formularios.
 
 ---
 
@@ -328,6 +327,13 @@ Requiere `MAIL_ENABLED=1` y `mail.env` configurado (IONOS, etc.):
 4. Mensaje genérico en `/olvide` (no revela si el email existe).
 
 **Administrador:** POST `/usuario/editar/<id>` con `password` no vacío sigue permitiendo asignar contraseña manualmente.
+
+### 10.7 Gestión y eliminación de usuarios (admin)
+
+1. **GET `/usuarios`** muestra listado con búsqueda (`q`) por nombre/email.
+2. **POST `/usuario/editar/<id>`** actualiza nombre, email, rol y contraseña opcional.
+3. **POST `/usuario/eliminar/<id>`** elimina la cuenta seleccionada tras confirmación en interfaz.
+4. Protección de seguridad: el admin logueado no puede eliminar su propio usuario en esa sesión.
 
 ---
 

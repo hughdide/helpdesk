@@ -574,3 +574,98 @@ body {
     display: inline-block;
     white-space: nowrap;
 }
+
+/* ===========================
+   TABLA USUARIOS
+   =========================== */
+
+.usuarios-table .acciones-col {
+    width: 1%;
+    white-space: nowrap;
+}
+
+.usuarios-table .acciones-col .btn {
+    margin-right: 0.45rem;
+}
+
+.usuarios-table .acciones-col .btn:last-child {
+    margin-right: 0;
+}
+
+/* ===========================
+   IMPRESION MANUALES (PDF)
+   =========================== */
+
+@page {
+    size: A4;
+    margin: 12mm;
+}
+
+@media print {
+    .navbar,
+    .sidebar,
+    .sidebar-toggle,
+    .site-footer,
+    .manual-doc .btn,
+    .alert {
+        display: none !important;
+    }
+
+    body {
+        background: #fff !important;
+    }
+
+    .main-content,
+    .sidebar.active ~ .main-content {
+        margin: 0 !important;
+    }
+
+    .container,
+    .manual-doc,
+    .manual-contenido {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+
+    .manual-contenido {
+        box-shadow: none !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+        font-size: 11pt;
+        line-height: 1.45;
+    }
+
+    .manual-contenido table {
+        table-layout: fixed;
+        width: 100% !important;
+        page-break-inside: auto;
+    }
+
+    .manual-contenido th,
+    .manual-contenido td {
+        word-break: break-word;
+        overflow-wrap: anywhere;
+        font-size: 10pt;
+    }
+
+    .manual-contenido pre,
+    .manual-contenido code {
+        white-space: pre-wrap !important;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+    }
+
+    .manual-contenido .mermaid,
+    .manual-contenido .mermaid svg {
+        max-width: 100% !important;
+        height: auto !important;
+    }
+
+    .manual-contenido h1,
+    .manual-contenido h2,
+    .manual-contenido h3 {
+        page-break-after: avoid;
+    }
+}
