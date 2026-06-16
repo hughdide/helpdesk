@@ -1,9 +1,10 @@
-#"""Compatibilidad con tabla notificaciones."""
+#"""Compatibilidad con tabla notificaciones"""
 
 _COLUMNAS_CACHE = {}
 
 
 def columnas_tabla(cursor, tabla):
+    """Consulta INFORMATION_SCHEMA.COLUMNS para saber qué columnas reales existen en la tabla y lo guarda en caché (_COLUMNAS_CACHE) para no consultar cada vez.."""
     if tabla in _COLUMNAS_CACHE:
         return _COLUMNAS_CACHE[tabla]
     cursor.execute(
@@ -26,7 +27,7 @@ def columna_fecha(cols):
 
 
 def normalizar_fila(fila, cols):
-    """Unifica nombres para plantillas y mailer."""
+    """Unifica nombres para plantillas y mailer. Toma una fila leída de notificaciones y rellena/convierte nombres “equivalentes”"""
     if 'creado_en' not in fila or fila.get('creado_en') is None:
         for alt in ('fecha', 'fecha_envio', 'created_at'):
             if fila.get(alt):
@@ -44,8 +45,8 @@ def normalizar_fila(fila, cols):
         fila['error_msg'] = fila.get('error') or fila.get('error_mensaje')
     return fila
 
-
 def listar_historial(cursor, limite=100):
+    """Leer historial de notificaciones: Devuelve los envíos (ok/error, asunto, email, fecha, etc.) para mostrarlos en la vista de admin."""
     cols = columnas_tabla(cursor, 'notificaciones')
     if not cols:
         return []
@@ -68,9 +69,10 @@ def _primera_columna(cols, opciones):
             return nombre
     return None
 
-
 def insertar_registro(cursor, conn, email, tipo, asunto, cuerpo,
                       ticket_id=None, usuario_id=None, enviado=0, error_msg=None):
+    """Insertar registros de notificación: Se usa desde mailer.py cada vez que se intenta enviar un correo (éxito o fallo)."""
+
     cols = columnas_tabla(cursor, 'notificaciones')
     if not cols:
         return
