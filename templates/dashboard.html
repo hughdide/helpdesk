@@ -5,7 +5,15 @@
 
 <form method="get" class="card card-soft p-3 mb-4">
   <div class="row g-2 align-items-end">
-    <div class="col-md-6">
+    <div class="col-md-4">
+      <label class="form-label small mb-1">Período</label>
+      <select name="periodo" class="form-select">
+        {% for key, info in dashboard_periodos.items() %}
+        <option value="{{ key }}" {% if periodo_clave == key %}selected{% endif %}>{{ info[1] }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4">
       <label class="form-label small mb-1">Filtrar por agente asignado</label>
       <select name="agente_id" class="form-select">
         <option value="">Todos los agentes</option>
@@ -14,40 +22,42 @@
         {% endfor %}
       </select>
     </div>
-    <div class="col-md-3">
+    <div class="col-md-2">
       <button type="submit" class="btn btn-galsoft w-100">Filtrar</button>
     </div>
-    <div class="col-md-3">
-      {% if filtro_agente_id %}
-      <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary w-100">Ver todos</a>
+    <div class="col-md-2">
+      {% if filtro_agente_id or periodo_clave != 'todo' %}
+      <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary w-100">Limpiar</a>
       {% endif %}
     </div>
   </div>
-  {% if filtro_agente_id %}
-  <p class="small text-muted mb-0 mt-2">Mostrando estadísticas del agente seleccionado.</p>
+  {% if filtro_agente_id or periodo_clave != 'todo' %}
+  <p class="small text-muted mb-0 mt-2">
+    {{ periodo_etiqueta }}{% if filtro_agente_id %} · agente filtrado{% endif %}
+  </p>
   {% endif %}
 </form>
 
 <div class="card card-soft p-4 mb-4">
   <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-    <h5 class="mb-0"><a href="{{ url_for('index') }}" class="text-decoration-none text-dark">Tickets</a></h5>
-    <a href="{{ url_for('index') }}" class="btn btn-sm btn-outline-primary">Ver todos ({{ total }})</a>
+    <h5 class="mb-0">Tickets</h5>
+    <a href="{{ url_index(filtro_agente_id) }}" class="btn btn-sm btn-outline-primary">Ver listado ({{ total }})</a>
   </div>
   <div class="row g-2">
     <div class="col-md-4">
-      <a href="{{ url_for('index') }}?estado=Abierto" class="dashboard-ticket-link stat-abiertos">
+      <a href="{{ url_index(filtro_agente_id, estado='Abierto') }}" class="dashboard-ticket-link stat-abiertos">
         <span>Abiertos</span>
         <strong>{{ abiertos }}</strong>
       </a>
     </div>
     <div class="col-md-4">
-      <a href="{{ url_for('index') }}?estado=En proceso" class="dashboard-ticket-link stat-proceso">
+      <a href="{{ url_index(filtro_agente_id, estado='En proceso') }}" class="dashboard-ticket-link stat-proceso">
         <span>En proceso</span>
         <strong>{{ proceso }}</strong>
       </a>
     </div>
     <div class="col-md-4">
-      <a href="{{ url_for('index') }}?estado=Cerrado" class="dashboard-ticket-link stat-cerrados">
+      <a href="{{ url_index(filtro_agente_id, estado='Cerrado') }}" class="dashboard-ticket-link stat-cerrados">
         <span>Cerrados</span>
         <strong>{{ cerrados }}</strong>
       </a>
@@ -57,54 +67,116 @@
 
 <div class="row g-3 mb-4">
   <div class="col-md-3 col-6">
-    <div class="stat-card stat-total">
-      <h6>Total tickets</h6>
-      <p class="stat-number">{{ total }}</p>
-    </div>
+    <a href="{{ url_index(filtro_agente_id) }}" class="text-decoration-none">
+      <div class="stat-card stat-total dashboard-stat-link">
+        <h6>Total tickets</h6>
+        <p class="stat-number">{{ total }}</p>
+      </div>
+    </a>
   </div>
   <div class="col-md-3 col-6">
-    <div class="stat-card stat-cerrados">
-      <h6>Prioridad alta (abiertos)</h6>
-      <p class="stat-number">{{ alta_abiertos }}</p>
-    </div>
+    <a href="{{ url_index(filtro_agente_id, prioridad='alta') }}" class="text-decoration-none">
+      <div class="stat-card stat-cerrados dashboard-stat-link">
+        <h6>Prioridad alta (activos)</h6>
+        <p class="stat-number">{{ alta_abiertos }}</p>
+      </div>
+    </a>
   </div>
   <div class="col-md-3 col-6">
-    <div class="stat-card stat-proceso">
-      <h6>Sin asignar</h6>
-      <p class="stat-number">{{ sin_asignar }}</p>
-    </div>
+    <a href="{{ url_index(filtro_agente_id, sin_asignar='1') }}" class="text-decoration-none">
+      <div class="stat-card stat-proceso dashboard-stat-link">
+        <h6>Sin asignar</h6>
+        <p class="stat-number">{{ sin_asignar }}</p>
+      </div>
+    </a>
   </div>
   <div class="col-md-3 col-6">
-    <div class="stat-card stat-total">
-      <h6>Cerrados (7 días)</h6>
-      <p class="stat-number">{{ cerrados_semana }}</p>
+    <a href="{{ url_index(filtro_agente_id, estado='Cerrado') }}" class="text-decoration-none">
+      <div class="stat-card stat-total dashboard-stat-link">
+        <h6>Cerrados (7 días)</h6>
+        <p class="stat-number">{{ cerrados_semana }}</p>
+      </div>
+    </a>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="stat-card stat-total h-100">
+      <h6>Tiempo medio 1ª respuesta</h6>
+      <p class="stat-number stat-number-sm">{{ media_respuesta_seg|duracion_es }}</p>
+      <p class="small text-muted mb-0">Desde la creación del ticket</p>
     </div>
+  </div>
+  <div class="col-md-4">
+    <div class="stat-card stat-total h-100">
+      <h6>MTTR (resolución)</h6>
+      <p class="stat-number stat-number-sm">{{ mttr_segundos|duracion_es }}</p>
+      <p class="small text-muted mb-0">Tiempo medio hasta el cierre</p>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <a href="{{ url_index(filtro_agente_id, estado='Cerrado') }}" class="text-decoration-none">
+      <div class="stat-card stat-abiertos dashboard-stat-link h-100">
+        <h6>Cumplimiento SLA</h6>
+        <p class="stat-number stat-number-sm">
+          {% if sla_cumplimiento_pct is not none %}{{ sla_cumplimiento_pct }}%{% else %}—{% endif %}
+        </p>
+        <p class="small text-muted mb-0">
+          {{ sla_cerrados_en_plazo }} en plazo · {{ sla_cerrados_fuera_plazo }} fuera de plazo
+        </p>
+      </div>
+    </a>
   </div>
 </div>
 
 <div class="card card-soft p-4 mb-4">
   <h5 class="mb-3">SLA — niveles de servicio</h5>
-  <div class="row g-3 mb-3">
-    <div class="col-md-4">
-      <a href="{{ url_for('index') }}?sla=vencido" class="text-decoration-none">
-        <div class="stat-card stat-cerrados">
-          <h6>Respuesta vencida</h6>
-          <p class="stat-number">{{ sla_resp_vencidos }}</p>
+  <div class="row g-3 mb-4">
+    <div class="col-lg-7">
+      <div class="row g-3">
+        <div class="col-md-6 col-6">
+          <a href="{{ url_index(filtro_agente_id, sla='resp_vencido') }}" class="text-decoration-none">
+            <div class="stat-card stat-cerrados dashboard-stat-link">
+              <h6>Respuesta vencida</h6>
+              <p class="stat-number">{{ sla_resp_vencidos }}</p>
+              <p class="small text-muted mb-0">Sin responder o respondidos tarde</p>
+            </div>
+          </a>
         </div>
-      </a>
-    </div>
-    <div class="col-md-4">
-      <a href="{{ url_for('index') }}?sla=vencido" class="text-decoration-none">
-        <div class="stat-card stat-cerrados">
-          <h6>Resolución vencida</h6>
-          <p class="stat-number">{{ sla_resol_vencidos }}</p>
+        <div class="col-md-6 col-6">
+          <a href="{{ url_index(filtro_agente_id, sla='resol_vencido') }}" class="text-decoration-none">
+            <div class="stat-card stat-cerrados dashboard-stat-link">
+              <h6>Resolución vencida</h6>
+              <p class="stat-number">{{ sla_resol_vencidos }}</p>
+              <p class="small text-muted mb-0">Plazo de cierre superado</p>
+            </div>
+          </a>
         </div>
-      </a>
+        <div class="col-md-6 col-6">
+          <a href="{{ url_index(filtro_agente_id, sla='riesgo') }}" class="text-decoration-none">
+            <div class="stat-card stat-proceso dashboard-stat-link">
+              <h6>En riesgo</h6>
+              <p class="stat-number">{{ sla_en_riesgo }}</p>
+              <p class="small text-muted mb-0">Último 25% del plazo (activos)</p>
+            </div>
+          </a>
+        </div>
+        <div class="col-md-6 col-6">
+          <a href="{{ url_index(filtro_agente_id, sla='resol_vencido', estado='Cerrado') }}" class="text-decoration-none">
+            <div class="stat-card stat-cerrados dashboard-stat-link">
+              <h6>Cerrados fuera de plazo</h6>
+              <p class="stat-number">{{ sla_cerrados_fuera_plazo }}</p>
+              <p class="small text-muted mb-0">Histórico de cierres tardíos</p>
+            </div>
+          </a>
+        </div>
+      </div>
     </div>
-    <div class="col-md-4">
-      <div class="stat-card stat-proceso">
-        <h6>En riesgo (último 25% del plazo)</h6>
-        <p class="stat-number">{{ sla_en_riesgo }}</p>
+    <div class="col-lg-5">
+      <p class="small fw-semibold text-center mb-2">Tickets activos por estado SLA</p>
+      <div class="dashboard-chart-wrap mx-auto">
+        <canvas id="chartSla"></canvas>
       </div>
     </div>
   </div>
@@ -118,15 +190,31 @@
   </table>
 </div>
 
+<div class="card card-soft p-4 mb-4">
+  <h5 class="mb-3">Tendencia — últimas 8 semanas</h5>
+  <div class="dashboard-chart-wrap dashboard-chart-wide mx-auto">
+    <canvas id="chartTendencia"></canvas>
+  </div>
+</div>
+
 <div class="row g-4 mb-4">
   <div class="col-lg-6">
-    <div class="card card-soft p-3">
+    <div class="card card-soft p-3 h-100">
       <h5 class="mb-3">Tickets activos por agente</h5>
       <table class="table table-sm mb-0">
         <thead><tr><th>Agente</th><th>Activos</th></tr></thead>
         <tbody>
           {% for fila in por_agente %}
-          <tr><td>{{ fila.nombre }}</td><td>{{ fila.total }}</td></tr>
+          <tr>
+            <td>
+              {% if fila.agente_id %}
+              <a href="{{ url_index(fila.agente_id) }}">{{ fila.nombre }}</a>
+              {% else %}
+              <a href="{{ url_index(filtro_agente_id, sin_asignar='1') }}">{{ fila.nombre }}</a>
+              {% endif %}
+            </td>
+            <td>{{ fila.total }}</td>
+          </tr>
           {% else %}
           <tr><td colspan="2" class="text-muted">Sin datos</td></tr>
           {% endfor %}
@@ -135,13 +223,24 @@
     </div>
   </div>
   <div class="col-lg-6">
-    <div class="card card-soft p-3">
+    <div class="card card-soft p-3 h-100">
       <h5 class="mb-3">Tickets por categoría</h5>
       <table class="table table-sm mb-0">
         <thead><tr><th>Categoría</th><th>Total</th></tr></thead>
         <tbody>
           {% for fila in por_categoria %}
-          <tr><td>{{ fila.nombre or 'Sin categoría' }}</td><td>{{ fila.total }}</td></tr>
+          <tr>
+            <td>
+              {% if fila.categoria_id %}
+              <a href="{{ url_index(filtro_agente_id, categoria_id=fila.categoria_id) }}">{{ fila.nombre }}</a>
+              {% else %}
+              {{ fila.nombre or 'Sin categoría' }}
+              {% endif %}
+            </td>
+            <td>{{ fila.total }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="2" class="text-muted">Sin datos</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -149,70 +248,113 @@
   </div>
 </div>
 
-<hr class="my-5">
-
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-<div class="row justify-content-center align-items-center mt-5">
-  <div class="col-md-4 d-flex justify-content-center">
-    <div style="width: 240px; height: 240px;">
-      <canvas id="chartEstados"></canvas>
+<div class="card card-soft p-4 mb-4">
+  <h5 class="mb-4 text-center">Distribución de tickets</h5>
+  <div class="row justify-content-center align-items-center g-4">
+    <div class="col-md-4 d-flex justify-content-center">
+      <div class="dashboard-chart-wrap">
+        <canvas id="chartEstados"></canvas>
+      </div>
     </div>
-  </div>
-  <div class="col-md-6 d-flex justify-content-center">
-    <div style="width: 350px; height: 260px;">
-      <canvas id="chartAgentes"></canvas>
+    <div class="col-md-7 d-flex justify-content-center">
+      <div class="dashboard-chart-wrap dashboard-chart-wide">
+        <canvas id="chartAgentes"></canvas>
+      </div>
     </div>
   </div>
 </div>
 
 <script>
-const ctx = document.getElementById('chartEstados');
-new Chart(ctx, {
+const chartOpts = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+        legend: {
+            position: 'bottom',
+            labels: { color: '#2e2e2e', font: { size: 13 } }
+        }
+    }
+};
+
+new Chart(document.getElementById('chartEstados'), {
     type: 'pie',
     data: {
         labels: ['Abiertos', 'En proceso', 'Cerrados'],
         datasets: [{
             data: [{{ abiertos }}, {{ proceso }}, {{ cerrados }}],
-            backgroundColor: [
-                '#d4edda',
-                '#fff3cd',
-                '#f8d7da'
-            ],
+            backgroundColor: ['#d4edda', '#fff3cd', '#f8d7da'],
+            borderColor: '#ffffff',
+            borderWidth: 2
+        }]
+    },
+    options: chartOpts
+});
+
+new Chart(document.getElementById('chartSla'), {
+    type: 'doughnut',
+    data: {
+        labels: ['En plazo', 'En riesgo', 'Vencido'],
+        datasets: [{
+            data: [{{ sla_plazo }}, {{ sla_riesgo }}, {{ sla_vencido }}],
+            backgroundColor: ['#d4edda', '#fff3cd', '#f8d7da'],
             borderColor: '#ffffff',
             borderWidth: 2
         }]
     },
     options: {
-        responsive: true,
-        maintainAspectRatio: false,
+        ...chartOpts,
+        cutout: '55%',
         plugins: {
-            legend: {
-                position: 'bottom',
-                labels: {
-                    color: '#2e2e2e',
-                    font: { size: 14 }
-                }
-            }
+            ...chartOpts.plugins,
+            legend: { position: 'bottom' }
         }
     }
 });
 
-const ctxAgentes = document.getElementById('chartAgentes');
-new Chart(ctxAgentes, {
+new Chart(document.getElementById('chartTendencia'), {
+    type: 'line',
+    data: {
+        labels: {{ tendencia_semanas|tojson }},
+        datasets: [
+            {
+                label: 'Creados',
+                data: {{ tendencia_creados|tojson }},
+                borderColor: '#7a9cff',
+                backgroundColor: 'rgba(122, 156, 255, 0.15)',
+                fill: true,
+                tension: 0.3
+            },
+            {
+                label: 'Cerrados',
+                data: {{ tendencia_cerrados|tojson }},
+                borderColor: '#e67e22',
+                backgroundColor: 'rgba(230, 126, 34, 0.1)',
+                fill: true,
+                tension: 0.3
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+            y: { beginAtZero: true, ticks: { stepSize: 1, color: '#2e2e2e' } },
+            x: { ticks: { color: '#2e2e2e' } }
+        },
+        plugins: { legend: { position: 'bottom', labels: { color: '#2e2e2e' } } }
+    }
+});
+
+new Chart(document.getElementById('chartAgentes'), {
     type: 'bar',
     data: {
         labels: {{ agentes|tojson }},
         datasets: [{
-            label: 'Tickets por agente',
+            label: 'Tickets',
             data: {{ tickets_por_agente|tojson }},
-            backgroundColor: [
-                '#ffd6e8',
-                '#fff3b0',
-                '#bcd0ff',
-                '#d8b4e2',
-                '#c8f7dc'
-            ],
+            backgroundColor: ['#ffd6e8', '#fff3b0', '#bcd0ff', '#d8b4e2', '#c8f7dc'],
             borderColor: '#ffffff',
             borderWidth: 2,
             borderRadius: 8
@@ -222,33 +364,29 @@ new Chart(ctxAgentes, {
         responsive: true,
         maintainAspectRatio: false,
         scales: {
-            y: {
-                beginAtZero: true,
-                ticks: { color: '#2e2e2e' }
-            },
-            x: {
-                ticks: { color: '#2e2e2e' }
-            }
+            y: { beginAtZero: true, ticks: { color: '#2e2e2e' } },
+            x: { ticks: { color: '#2e2e2e' } }
         },
-        plugins: {
-            legend: { display: false }
-        }
+        plugins: { legend: { display: false } }
     }
 });
 </script>
 
-<hr class="my-5">
-
-<h4 class="fw-bold">Últimos tickets creados</h4>
-<ul class="list-group">
-  {% for t in ultimos %}
-  <li class="list-group-item d-flex justify-content-between">
-    <span>{{ t.titulo }}</span>
-    <span class="text-muted small">{{ t.creado_en|fecha_es }}</span>
-  </li>
-  {% else %}
-  <li class="list-group-item text-muted">No hay tickets con este filtro.</li>
-  {% endfor %}
-</ul>
+<div class="card card-soft p-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 class="mb-0">Últimos tickets creados</h5>
+    <a href="{{ url_index(filtro_agente_id) }}" class="btn btn-sm btn-outline-primary">Ver todos</a>
+  </div>
+  <ul class="list-group list-group-flush">
+    {% for t in ultimos %}
+    <li class="list-group-item d-flex justify-content-between px-0">
+      <a href="{{ url_for('ticket_detalle', id=t.id) }}">{{ t.titulo }}</a>
+      <span class="text-muted small">{{ t.creado_en|fecha_es }}</span>
+    </li>
+    {% else %}
+    <li class="list-group-item text-muted px-0">No hay tickets con este filtro.</li>
+    {% endfor %}
+  </ul>
+</div>
 
 {% endblock %}

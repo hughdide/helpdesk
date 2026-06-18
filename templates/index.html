@@ -4,7 +4,7 @@
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
   <div>
     <h3 class="mb-1">Tickets</h3>
-    {% if filtros.estado or filtros.prioridad or filtros.categoria_id or filtros.buscar or filtros.mis_tickets or filtros.sin_asignar or filtros.sla %}
+    {% if filtros.estado or filtros.prioridad or filtros.categoria_id or filtros.buscar or filtros.mis_tickets or filtros.sin_asignar or filtros.sla or filtros.agente_id %}
     <p class="text-muted small mb-0">
       Filtros activos —
       <a href="{{ url_for('index') }}">Ver todos</a>
@@ -56,6 +56,12 @@
       </label>
     </div>
     {% endif %}
+    {% if filtros.sla %}
+    <input type="hidden" name="sla" value="{{ filtros.sla }}">
+    {% endif %}
+    {% if filtros.agente_id %}
+    <input type="hidden" name="agente_id" value="{{ filtros.agente_id }}">
+    {% endif %}
     <div class="col-md-2">
       <button class="btn btn-galsoft w-100">Filtrar</button>
     </div>
@@ -68,9 +74,42 @@
     <article class="ticket-card h-100 p-3 d-flex flex-column">
       <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
         <span class="text-muted small fw-semibold">#{{ t.id }}</span>
+        {% if rol in ['agente', 'admin'] and t.sla %}
+        <div class="text-end">
+          <div class="sla-top-label">
+            <strong>SLA:</strong>
+            <span class="sla-badge sla-{{ t.sla.estado_global }}">
+              {{ etiqueta_estado(t.sla.estado_global) }}
+            </span>
+          </div>
+          <div class="sla-timers mt-1" aria-live="polite">
+            {% if t.primera_respuesta_en %}
+            <div class="sla-timer small"><strong>1ª respuesta:</strong> <span class="sla-timer-valor sla-timer-cumplido">Cumplida</span></div>
+            {% elif t.sla.limite_respuesta and t.estado != 'Cerrado' %}
+            <div class="sla-timer small"
+                 data-deadline="{{ t.sla.limite_respuesta.strftime('%Y-%m-%dT%H:%M:%S') }}">
+              <strong>1ª respuesta:</strong> <span class="sla-timer-valor"></span>
+            </div>
+            {% endif %}
+            {% if t.estado == 'Cerrado' %}
+            {% if t.sla.estado_resolucion == 'vencido' %}
+            <div class="sla-timer small"><strong>Resolución:</strong> <span class="sla-timer-valor sla-timer-vencido">Cerrada fuera de plazo</span></div>
+            {% else %}
+            <div class="sla-timer small"><strong>Resolución:</strong> <span class="sla-timer-valor sla-timer-cumplido">Cerrada en plazo</span></div>
+            {% endif %}
+            {% elif t.sla.limite_resolucion %}
+            <div class="sla-timer small"
+                 data-deadline="{{ t.sla.limite_resolucion.strftime('%Y-%m-%dT%H:%M:%S') }}">
+              <strong>Resolución:</strong> <span class="sla-timer-valor"></span>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+        {% else %}
         {% if t.estado == 'Abierto' %}<span class="estado-abierto">{{ t.estado }}</span>
         {% elif t.estado == 'En proceso' %}<span class="estado-proceso">{{ t.estado }}</span>
         {% else %}<span class="estado-cerrado">{{ t.estado }}</span>{% endif %}
+        {% endif %}
       </div>
 
       <h5 class="ticket-card-title mb-2">{{ t.titulo }}</h5>
@@ -97,8 +136,10 @@
         </li>
         {% if rol in ['agente', 'admin'] and t.sla %}
         <li class="mt-1">
-          <strong>SLA:</strong>
-          <span class="sla-badge sla-{{ t.sla.estado_global }}">{{ etiqueta_estado(t.sla.estado_global) }}</span>
+          <strong>Estado:</strong>
+          {% if t.estado == 'Abierto' %}<span class="estado-abierto">{{ t.estado }}</span>
+          {% elif t.estado == 'En proceso' %}<span class="estado-proceso">{{ t.estado }}</span>
+          {% else %}<span class="estado-cerrado">{{ t.estado }}</span>{% endif %}
         </li>
         {% endif %}
         <li class="text-muted mt-2">{{ t.creado_en|fecha_es }}</li>
@@ -115,5 +156,47 @@
   </div>
   {% endfor %}
 </div>
+
+<script>
+(function () {
+  var UMBRAL_URGENTE_MS = 2 * 60 * 60 * 1000;
+
+  function formatearRestante(ms) {
+    var totalSeg = Math.floor(Math.abs(ms) / 1000);
+    var dias = Math.floor(totalSeg / 86400);
+    var horas = Math.floor((totalSeg % 86400) / 3600);
+    var mins = Math.floor((totalSeg % 3600) / 60);
+    var segs = totalSeg % 60;
+    if (dias > 0) return dias + 'd ' + horas + 'h ' + mins + 'm';
+    if (horas > 0) return horas + 'h ' + mins + 'm ' + segs + 's';
+    if (mins > 0) return mins + 'm ' + segs + 's';
+    return segs + 's';
+  }
+
+  function actualizarContadores() {
+    document.querySelectorAll('.sla-timer[data-deadline]').forEach(function (fila) {
+      var valor = fila.querySelector('.sla-timer-valor');
+      if (!valor) return;
+      var limite = new Date(fila.dataset.deadline.replace(' ', 'T'));
+      var restante = limite - new Date();
+
+      valor.classList.remove('sla-timer-urgente', 'sla-timer-vencido');
+
+      if (restante > 0) {
+        valor.textContent = 'Quedan ' + formatearRestante(restante);
+        if (restante < UMBRAL_URGENTE_MS) {
+          valor.classList.add('sla-timer-urgente');
+        }
+      } else {
+        valor.textContent = 'Vencido hace ' + formatearRestante(restante);
+        valor.classList.add('sla-timer-vencido');
+      }
+    });
+  }
+
+  actualizarContadores();
+  setInterval(actualizarContadores, 1000);
+})();
+</script>
 
 {% endblock %}

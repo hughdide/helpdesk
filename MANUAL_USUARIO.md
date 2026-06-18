@@ -92,8 +92,9 @@ Si olvidó su contraseña y **no** puede iniciar sesión (requiere correo activo
 4. Se abre el **detalle del ticket** recién creado.
 
 ### 4.2 Ver sus tickets
-- En **Inicio** solo aparecen **sus** peticiones, en tarjetas (cuadrados).
-- Cada tarjeta muestra: número, estado, prioridad, categoría, agente, fecha y SLA (si aplica).
+- En **Inicio** solo aparecen **sus** peticiones, en tarjetas.
+- Cada tarjeta muestra: número, **estado** (arriba a la derecha), prioridad, categoría, agente y fecha.
+- Los contadores SLA solo los ven **agentes y administradores**; el cliente no los visualiza.
 - Pulse **Ver detalle** para entrar al ticket.
 
 ### 4.3 Comentar en un ticket
@@ -111,7 +112,24 @@ Si el ticket tiene archivo adjunto, use **Descargar adjunto** en la ficha de inf
 ## 5. Agente — Guía paso a paso
 
 ### 5.1 Listado y filtros
-En **Inicio** ve **todos** los tickets. Puede filtrar por:
+En **Inicio** ve **todos** los tickets en tarjetas. Cada tarjeta muestra:
+
+- **Arriba a la derecha:** etiqueta **SLA:** con el estado global (En plazo, En riesgo, Vencido, Cumplido) y **dos contadores en tiempo real**:
+  - **1ª respuesta:** tiempo restante hasta la primera respuesta pública del agente.
+  - **Resolución:** tiempo restante hasta el cierre del ticket.
+- **En la lista de datos:** cliente, categoría, agente, prioridad y **estado** del ticket (Abierto, En proceso, Cerrado).
+
+Los contadores se actualizan **cada segundo** en el navegador. Colores del texto:
+
+| Situación | Color del contador |
+|-----------|-------------------|
+| Más de 2 horas restantes | Negro |
+| Menos de 2 horas restantes | Naranja |
+| Plazo superado | Rojo («Vencido hace…») |
+| 1ª respuesta cumplida | Verde («Cumplida») |
+| Ticket cerrado (resolución) | Verde («Cerrada») |
+
+Puede filtrar el listado por:
 - Texto (título o descripción).
 - Estado, prioridad, categoría.
 - **Mis tickets** — Asignados a usted.
@@ -165,7 +183,6 @@ Para **restablecer la contraseña** de un usuario:
 
 Al eliminar, el sistema pide confirmación. No se puede deshacer.
 
-**Importante:** El correo del cliente debe ser válido para notificaciones de tickets y para **recuperar/cambiar contraseña** por enlace.
 
 ### 6.2 Categorías
 1. Menú **Categorías**.
@@ -208,12 +225,31 @@ Plazos desde la creación del ticket:
 | Media | 8 horas | 48 horas |
 | Baja | 24 horas | 72 horas |
 
-**Indicadores SLA:**
+**Indicadores SLA (badge superior):**
 | Indicador | Color | Significado |
 |-----------|-------|-------------|
 | En plazo / Cumplido | <span class="sla-cumplido">Verde</span> | Dentro del plazo o respondido/cerrado a tiempo. |
 | En riesgo | <span class="sla-riesgo">Amarillo</span> | Queda poco margen (último 25 % del plazo). |
 | Vencido | <span class="sla-vencido">Rojo</span> | Se ha superado el plazo. |
+
+**Contadores en tarjetas (agente/admin):**
+
+Debajo del badge SLA aparecen dos líneas con etiquetas en negrita:
+
+| Línea | Qué mide | Texto cuando termina |
+|-------|----------|----------------------|
+| **1ª respuesta:** | Plazo para el primer comentario público del agente | «Cumplida» (verde) |
+| **Resolución:** | Plazo para cerrar el ticket | «Cerrada en plazo» (verde) o «Cerrada fuera de plazo» (rojo) |
+
+Colores del contador según tiempo restante:
+
+| Situación | Color |
+|-----------|-------|
+| Más de 2 horas | Negro |
+| Menos de 2 horas | Naranja |
+| Ya vencido | Rojo |
+| Cumplida / Cerrada en plazo | Verde |
+| Cerrada fuera de plazo | Rojo |
 
 La **primera respuesta** cuenta cuando un agente o admin deja un **comentario público** (las notas internas no cuentan).
 
@@ -265,6 +301,9 @@ Compruebe `MAIL_ENABLED=1` en `mail.env`, spam, y que el email de la cuenta sea 
 
 **¿Qué es una nota interna?**  
 Mensaje solo para el equipo de soporte; el cliente no lo ve ni recibe aviso.
+
+**¿Qué significan los contadores SLA en las tarjetas?**  
+**1ª respuesta** cuenta el tiempo hasta que un agente comente en público; **Resolución** hasta el cierre. Naranja = menos de 2 h; rojo = vencido; verde = cumplido o cerrado.
 
 **¿Por qué debo iniciar sesión otra vez al reiniciar el servidor?**  
 Es normal con `app.secret_key = os.urandom(24)`: la clave de sesión cambia en cada arranque.

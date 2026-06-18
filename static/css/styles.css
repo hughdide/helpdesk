@@ -404,6 +404,31 @@ body {
     background-color: #f8d7da; /* rojo suave */
 }
 
+.dashboard-stat-link {
+    display: block;
+    color: inherit;
+    cursor: pointer;
+}
+
+.dashboard-stat-link:hover {
+    color: inherit;
+}
+
+.stat-number-sm {
+    font-size: 1.75rem;
+}
+
+.dashboard-chart-wrap {
+    width: 100%;
+    max-width: 260px;
+    height: 240px;
+}
+
+.dashboard-chart-wide {
+    max-width: 100%;
+    height: 260px;
+}
+
 .stat-card:hover {
     transform: translateY(-4px);
     box-shadow: 0 8px 20px rgba(122, 156, 255, 0.3);
@@ -471,6 +496,62 @@ body {
     border-radius: 8px;
     font-size: 0.85rem;
     font-weight: 600;
+}
+
+.sla-countdown {
+    font-size: 0.75rem;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.sla-timers {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    align-items: flex-end;
+}
+
+.sla-timer {
+    font-size: 0.75rem;
+    line-height: 1.25;
+    color: #2e2e2e;
+}
+
+.sla-timer strong {
+    color: #2e2e2e;
+    font-weight: 700;
+}
+
+.sla-timer-valor {
+    font-weight: 600;
+    color: #2e2e2e;
+}
+
+.sla-timer-valor.sla-timer-urgente {
+    color: #e67e22;
+}
+
+.sla-timer-valor.sla-timer-vencido {
+    color: #c82333;
+}
+
+.sla-timer-valor.sla-timer-cumplido {
+    color: #28a745;
+}
+
+.sla-top-label {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+}
+
+.sla-retraso {
+    font-size: 0.8em;
+    font-weight: 600;
+    color: #c82333;
+    white-space: nowrap;
 }
 
 .sla-panel {
