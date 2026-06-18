@@ -34,10 +34,16 @@
           {% if sla.primera_respuesta_en %}
             {{ sla.primera_respuesta_en|fecha_es }}
             <span class="sla-badge sla-{{ sla.estado_respuesta }}">{{ etiqueta_estado(sla.estado_respuesta) }}</span>
+            {% if sla.retraso_respuesta %}
+            <span class="sla-retraso">(+{{ sla.retraso_respuesta }})</span>
+            {% endif %}
           {% else %}
             antes de {{ sla.limite_respuesta|fecha_es }}
             {% if rol in ['agente', 'admin'] %}
             <span class="sla-badge sla-{{ sla.estado_respuesta }}">{{ etiqueta_estado(sla.estado_respuesta) }}</span>
+            {% if sla.retraso_respuesta %}
+            <span class="sla-retraso">(+{{ sla.retraso_respuesta }})</span>
+            {% endif %}
             {% endif %}
           {% endif %}
         </p>
@@ -46,10 +52,16 @@
           {% if ticket.cerrado_en %}
             {{ ticket.cerrado_en|fecha_es }}
             <span class="sla-badge sla-{{ sla.estado_resolucion }}">{{ etiqueta_estado(sla.estado_resolucion) }}</span>
+            {% if sla.retraso_resolucion %}
+            <span class="sla-retraso">(+{{ sla.retraso_resolucion }})</span>
+            {% endif %}
           {% else %}
             antes de {{ sla.limite_resolucion|fecha_es }}
             {% if rol in ['agente', 'admin'] %}
             <span class="sla-badge sla-{{ sla.estado_resolucion }}">{{ etiqueta_estado(sla.estado_resolucion) }}</span>
+            {% if sla.retraso_resolucion %}
+            <span class="sla-retraso">(+{{ sla.retraso_resolucion }})</span>
+            {% endif %}
             {% endif %}
           {% endif %}
         </p>

@@ -10,6 +10,48 @@ SLA_HORAS = {
 
 RIESGO_FRACCION = 0.25  # último 25 % del plazo = en riesgo
 
+# Fragmentos SQL reutilizables (alineados con evaluar_sla)
+SQL_COND_RESPUESTA_VENCIDA = """
+(
+  (t.estado != 'Cerrado' AND t.primera_respuesta_en IS NULL
+   AND t.sla_respuesta_limite IS NOT NULL AND NOW() > t.sla_respuesta_limite)
+  OR
+  (t.primera_respuesta_en IS NOT NULL AND t.sla_respuesta_limite IS NOT NULL
+   AND t.primera_respuesta_en > t.sla_respuesta_limite)
+)
+"""
+
+SQL_COND_RESOLUCION_VENCIDA = """
+(
+  (t.estado != 'Cerrado' AND t.sla_resolucion_limite IS NOT NULL
+   AND NOW() > t.sla_resolucion_limite)
+  OR
+  (t.estado = 'Cerrado' AND t.cerrado_en IS NOT NULL AND t.sla_resolucion_limite IS NOT NULL
+   AND t.cerrado_en > t.sla_resolucion_limite)
+)
+"""
+
+SQL_COND_EN_RIESGO = """
+(
+  (
+    t.estado != 'Cerrado'
+    AND t.sla_respuesta_limite IS NOT NULL
+    AND t.primera_respuesta_en IS NULL
+    AND NOW() < t.sla_respuesta_limite
+    AND TIMESTAMPDIFF(SECOND, NOW(), t.sla_respuesta_limite)
+        <= TIMESTAMPDIFF(SECOND, t.creado_en, t.sla_respuesta_limite) * 0.25
+  )
+  OR
+  (
+    t.estado != 'Cerrado'
+    AND t.primera_respuesta_en IS NOT NULL
+    AND t.sla_resolucion_limite IS NOT NULL
+    AND NOW() < t.sla_resolucion_limite
+    AND TIMESTAMPDIFF(SECOND, NOW(), t.sla_resolucion_limite)
+        <= TIMESTAMPDIFF(SECOND, t.creado_en, t.sla_resolucion_limite) * 0.25
+  )
+)
+"""
 
 def _normalizar_prioridad(prioridad):
     p = (prioridad or 'media').lower()
@@ -97,6 +139,52 @@ def _estado_plazo_con_inicio(ahora, inicio, limite, cumplido_en):
     return 'pendiente'
 
 
+def _calcular_retraso_segundos(limite, cumplido_en, ahora, vencido):
+    """Segundos de retraso respecto al límite si el plazo está vencido."""
+    if not vencido:
+        return None
+    lim = _parse_fecha(limite)
+    if not lim:
+        return None
+    ref = _parse_fecha(cumplido_en) if cumplido_en else ahora
+    if not ref or ref <= lim:
+        return None
+    return int((ref - lim).total_seconds())
+
+
+def formatear_retraso(segundos):
+    """Texto legible para un retraso en segundos (p. ej. 2d 9h 27m)."""
+    if segundos is None or segundos <= 0:
+        return None
+    dias = segundos // 86400
+    horas = (segundos % 86400) // 3600
+    mins = (segundos % 3600) // 60
+    if dias > 0:
+        return f'{dias}d {horas}h {mins}m'
+    if horas > 0:
+        return f'{horas}h {mins}m'
+    if mins > 0:
+        return f'{mins}m'
+    return f'{segundos}s'
+
+
+def formatear_duracion(segundos):
+    """Duración media legible (p. ej. 2d 5h o 45m)."""
+    if segundos is None:
+        return '—'
+    total = int(round(segundos))
+    if total <= 0:
+        return '—'
+    dias = total // 86400
+    horas = (total % 86400) // 3600
+    mins = (total % 3600) // 60
+    if dias > 0:
+        return f'{dias}d {horas}h'
+    if horas > 0:
+        return f'{horas}h {mins}m'
+    return f'{mins}m'
+
+
 def evaluar_sla(ticket):
     """Devuelve diccionario con estados de respuesta y resolución para plantillas."""
     ahora = datetime.now()
@@ -149,6 +237,28 @@ def evaluar_sla(ticket):
         if orden.get(e, 0) > orden.get(peor, 0):
             peor = e
 
+    deadline_activo = None
+    tipo_deadline = None
+    if estado_ticket != 'Cerrado':
+        if not primera:
+            deadline_activo = lim_resp
+            tipo_deadline = 'respuesta'
+        else:
+            deadline_activo = lim_resol
+            tipo_deadline = 'resolucion'
+
+    retraso_resp = formatear_retraso(
+        _calcular_retraso_segundos(lim_resp, primera, ahora, est_resp == 'vencido')
+    )
+    retraso_resol = formatear_retraso(
+        _calcular_retraso_segundos(
+            lim_resol,
+            cerrado if estado_ticket == 'Cerrado' else None,
+            ahora,
+            est_resol == 'vencido',
+        )
+    )
+
     return {
         'prioridad': prioridad,
         'horas_respuesta': h_resp,
@@ -159,6 +269,10 @@ def evaluar_sla(ticket):
         'estado_resolucion': est_resol,
         'estado_global': peor,
         'primera_respuesta_en': primera,
+        'retraso_respuesta': retraso_resp,
+        'retraso_resolucion': retraso_resol,
+        'deadline_activo': deadline_activo,
+        'tipo_deadline': tipo_deadline,
     }
 
 

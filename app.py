@@ -13,6 +13,10 @@ from sla import (
     etiqueta_estado,
     actualizar_limites_ticket,
     marcar_primera_respuesta,
+    formatear_duracion,
+    SQL_COND_RESPUESTA_VENCIDA,
+    SQL_COND_RESOLUCION_VENCIDA,
+    SQL_COND_EN_RIESGO,
 )
 import mailer
 import config_mail
@@ -94,6 +98,10 @@ def fecha_es(valor):
                 return str(valor)
     return dt.strftime('%d-%m-%Y %H:%M')
 
+@app.template_filter('duracion_es')
+def duracion_es(valor):
+    return formatear_duracion(valor)
+
 # Consulta base reutilizable: ticket + nombre/email del cliente y agente + nombre de categoría.
 SQL_TICKET_BASE = """
 SELECT t.*, c.nombre AS cliente_nombre, c.email AS cliente_email,
@@ -168,13 +176,24 @@ def listar_tickets_consulta(rol, usuario_id, filtros_dict):
         condiciones.append("(t.titulo LIKE %s OR t.descripcion LIKE %s)")
         params.extend([like, like])
 
-    # Agente/admin: tickets abiertos con SLA de respuesta o resolución vencido
-    if filtros_dict.get('sla') == 'vencido' and filtros_dict.get('rol') in ['agente', 'admin']:
-        condiciones.append("t.estado != 'Cerrado'")
-        condiciones.append(
-            "( (t.primera_respuesta_en IS NULL AND NOW() > t.sla_respuesta_limite) "
-            "OR (t.estado != 'Cerrado' AND NOW() > t.sla_resolucion_limite) )"
-        )
+    # Agente/admin: filtro por agente asignado
+    if filtros_dict.get('agente_id') and filtros_dict.get('rol') in ['agente', 'admin']:
+        condiciones.append("t.agente_id = %s")
+        params.append(int(filtros_dict['agente_id']))
+
+    # Agente/admin: tickets con SLA de respuesta, resolución vencido o en riesgo
+    sla_filtro = filtros_dict.get('sla', '').strip()
+    if sla_filtro in ('vencido', 'resp_vencido', 'resol_vencido', 'riesgo') and filtros_dict.get('rol') in ['agente', 'admin']:
+        if sla_filtro == 'resp_vencido':
+            condiciones.append(SQL_COND_RESPUESTA_VENCIDA.strip())
+        elif sla_filtro == 'resol_vencido':
+            condiciones.append(SQL_COND_RESOLUCION_VENCIDA.strip())
+        elif sla_filtro == 'riesgo':
+            condiciones.append(SQL_COND_EN_RIESGO.strip())
+        else:
+            condiciones.append(
+                '(' + SQL_COND_RESPUESTA_VENCIDA.strip() + ' OR ' + SQL_COND_RESOLUCION_VENCIDA.strip() + ')'
+            )
 
     if condiciones:
         sql += " WHERE " + " AND ".join(condiciones)
@@ -215,6 +234,111 @@ def listar_agentes():
     return micursor.fetchall()
 
 
+DASHBOARD_PERIODOS = {
+    'todo': (None, 'Todo el historial'),
+    '7': (7, 'Últimos 7 días'),
+    '30': (30, 'Último mes'),
+    '90': (90, 'Último trimestre'),
+    '365': (365, 'Último año'),
+}
+
+
+def _dashboard_periodo_dias(clave):
+    if clave not in DASHBOARD_PERIODOS:
+        clave = 'todo'
+    return DASHBOARD_PERIODOS[clave][0]
+
+
+def _sql_filtro_agente(alias, agente_id):
+    if agente_id:
+        return f' AND {alias}.agente_id = %s', (agente_id,)
+    return '', ()
+
+
+def _sql_filtro_creado_desde(alias, dias):
+    if dias:
+        return f' AND {alias}.creado_en >= DATE_SUB(NOW(), INTERVAL %s DAY)', (dias,)
+    return '', ()
+
+
+def _sql_filtro_cerrado_desde(alias, dias):
+    if dias:
+        return f' AND {alias}.cerrado_en >= DATE_SUB(NOW(), INTERVAL %s DAY)', (dias,)
+    return '', ()
+
+
+def _contar_tickets_dashboard(sql_where, params=(), agente_id=None):
+    sql_agente, p_agente = _sql_filtro_agente('t', agente_id)
+    micursor.execute(
+        'SELECT COUNT(*) AS n FROM tickets t WHERE ' + sql_where + sql_agente,
+        params + p_agente,
+    )
+    return micursor.fetchone()['n']
+
+
+def _tendencia_semanal_dashboard(semanas, agente_id=None):
+    sql_agente, p_agente = _sql_filtro_agente('t', agente_id)
+    desde = datetime.now() - timedelta(weeks=semanas)
+
+    micursor.execute(
+        """SELECT DATE_FORMAT(t.creado_en, '%%x-%%v') AS semana, COUNT(*) AS n
+           FROM tickets t WHERE t.creado_en >= %s"""
+        + sql_agente + ' GROUP BY semana',
+        (desde,) + p_agente,
+    )
+    creados_map = {r['semana']: r['n'] for r in micursor.fetchall()}
+
+    micursor.execute(
+        """SELECT DATE_FORMAT(t.cerrado_en, '%%x-%%v') AS semana, COUNT(*) AS n
+           FROM tickets t
+           WHERE t.cerrado_en IS NOT NULL AND t.cerrado_en >= %s"""
+        + sql_agente + ' GROUP BY semana',
+        (desde,) + p_agente,
+    )
+    cerrados_map = {r['semana']: r['n'] for r in micursor.fetchall()}
+
+    etiquetas, creados, cerrados = [], [], []
+    hoy = datetime.now()
+    for i in range(semanas - 1, -1, -1):
+        d = hoy - timedelta(weeks=i)
+        iso = d.isocalendar()
+        clave = f'{iso.year}-{iso.week:02d}'
+        etiquetas.append(f'S{iso.week}')
+        creados.append(creados_map.get(clave, 0))
+        cerrados.append(cerrados_map.get(clave, 0))
+    return etiquetas, creados, cerrados
+
+
+def _sla_donut_activos(agente_id=None, dias_periodo=None):
+    sql = SQL_TICKET_BASE + " WHERE t.estado != 'Cerrado'"
+    params = []
+    extra, p = _sql_filtro_creado_desde('t', dias_periodo)
+    sql += extra
+    params.extend(p)
+    extra, p = _sql_filtro_agente('t', agente_id)
+    sql += extra
+    params.extend(p)
+    micursor.execute(sql, tuple(params))
+    plazo = riesgo = vencido = 0
+    for ticket in micursor.fetchall():
+        estado = evaluar_sla(ticket)['estado_global']
+        if estado == 'vencido':
+            vencido += 1
+        elif estado == 'riesgo':
+            riesgo += 1
+        else:
+            plazo += 1
+    return plazo, riesgo, vencido
+
+
+def _url_index_dashboard(agente_id=None, **kwargs):
+    """Construye URL al listado preservando filtros del dashboard."""
+    params = {k: v for k, v in kwargs.items() if v not in (None, '', False)}
+    if agente_id:
+        params['agente_id'] = agente_id
+    return url_for('index', **params)
+
+
 # Inicio — listado de tickets (con filtros). Cliente ve solo los suyos; agente/admin ven todos.
 @app.route("/")
 def index():
@@ -231,8 +355,13 @@ def index():
         'mis_tickets': request.args.get('mis_tickets') == '1',
         'sin_asignar': request.args.get('sin_asignar') == '1',
         'sla': request.args.get('sla', '').strip(),
+        'agente_id': request.args.get('agente_id', '').strip(),
         'rol': rol,
     }
+    if filtros['agente_id']:
+        filtros['agente_id'] = int(filtros['agente_id'])
+    else:
+        filtros['agente_id'] = None
     if filtros['categoria_id']:
         filtros['categoria_id'] = int(filtros['categoria_id'])
     else:
@@ -686,98 +815,153 @@ def dashboard():
 
     agente_filtro = request.args.get('agente_id', '').strip()
     filtro_agente_id = int(agente_filtro) if agente_filtro else None
-    filtro_sql = ''
-    filtro_params = ()
-    if filtro_agente_id:
-        filtro_sql = ' AND agente_id = %s'
-        filtro_params = (filtro_agente_id,)
+    periodo_clave = request.args.get('periodo', 'todo').strip()
+    if periodo_clave not in DASHBOARD_PERIODOS:
+        periodo_clave = 'todo'
+    dias_periodo = _dashboard_periodo_dias(periodo_clave)
+    periodo_etiqueta = DASHBOARD_PERIODOS[periodo_clave][1]
 
-    def contar(sql, extra_params=()):
-        micursor.execute(sql + filtro_sql, filtro_params + extra_params)
-        return micursor.fetchone()['n']
+    sql_creado, p_creado = _sql_filtro_creado_desde('t', dias_periodo)
+    sql_cerrado, p_cerrado = _sql_filtro_cerrado_desde('t', dias_periodo)
+    sql_agente, p_agente = _sql_filtro_agente('t', filtro_agente_id)
+    base_creado = '1=1' + sql_creado
+    base_cerrado = "t.estado = 'Cerrado'" + sql_cerrado
+    base_activo = "t.estado != 'Cerrado'" + sql_creado
 
-    total = contar("SELECT COUNT(*) AS n FROM tickets WHERE 1=1")
-    abiertos = contar("SELECT COUNT(*) AS n FROM tickets WHERE estado='Abierto'")
-    proceso = contar("SELECT COUNT(*) AS n FROM tickets WHERE estado='En proceso'")
-    cerrados = contar("SELECT COUNT(*) AS n FROM tickets WHERE estado='Cerrado'")
-    alta_abiertos = contar(
-        "SELECT COUNT(*) AS n FROM tickets WHERE prioridad='alta' AND estado != 'Cerrado'"
+    total = _contar_tickets_dashboard(base_creado, p_creado, filtro_agente_id)
+    abiertos = _contar_tickets_dashboard(
+        base_activo + " AND t.estado = 'Abierto'", p_creado, filtro_agente_id,
     )
-    sin_asignar = contar(
-        "SELECT COUNT(*) AS n FROM tickets WHERE agente_id IS NULL AND estado != 'Cerrado'"
+    proceso = _contar_tickets_dashboard(
+        base_activo + " AND t.estado = 'En proceso'", p_creado, filtro_agente_id,
     )
-    cerrados_semana = contar("""
-        SELECT COUNT(*) AS n FROM tickets
-        WHERE estado='Cerrado' AND cerrado_en >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-    """)
+    cerrados = _contar_tickets_dashboard(base_cerrado, p_cerrado, filtro_agente_id)
+    alta_abiertos = _contar_tickets_dashboard(
+        base_activo + " AND t.prioridad = 'alta'", p_creado, filtro_agente_id,
+    )
+    sin_asignar = _contar_tickets_dashboard(
+        base_activo + ' AND t.agente_id IS NULL', p_creado, filtro_agente_id,
+    )
+    cerrados_semana = _contar_tickets_dashboard(
+        "t.estado = 'Cerrado' AND t.cerrado_en >= DATE_SUB(NOW(), INTERVAL 7 DAY)",
+        (), filtro_agente_id,
+    )
 
-    micursor.execute("""
-        SELECT a.nombre, COUNT(t.id) AS total
-        FROM tickets t
-        INNER JOIN usuarios a ON t.agente_id = a.id
-        WHERE t.estado != 'Cerrado'
-        """ + (filtro_sql.replace('agente_id', 't.agente_id') if filtro_sql else '') + """
-        GROUP BY a.nombre
-        ORDER BY total DESC
-    """, filtro_params)
+    sla_filtro_agente = sql_agente
+    sla_params = p_creado + p_agente
+
+    micursor.execute(
+        """SELECT COUNT(*) AS n FROM tickets t WHERE """
+        + base_creado + ' AND ' + SQL_COND_RESPUESTA_VENCIDA.strip()
+        + sla_filtro_agente,
+        sla_params,
+    )
+    sla_resp_vencidos = micursor.fetchone()['n']
+
+    micursor.execute(
+        """SELECT COUNT(*) AS n FROM tickets t WHERE """
+        + base_creado + ' AND ' + SQL_COND_RESOLUCION_VENCIDA.strip()
+        + sla_filtro_agente,
+        sla_params,
+    )
+    sla_resol_vencidos = micursor.fetchone()['n']
+
+    micursor.execute(
+        """SELECT COUNT(*) AS n FROM tickets t WHERE """
+        + base_activo + ' AND ' + SQL_COND_EN_RIESGO.strip()
+        + sla_filtro_agente,
+        p_creado + p_agente,
+    )
+    sla_en_riesgo = micursor.fetchone()['n']
+
+    micursor.execute(
+        """SELECT COUNT(*) AS n FROM tickets t WHERE """
+        + base_cerrado
+        + """ AND t.cerrado_en IS NOT NULL
+            AND t.sla_resolucion_limite IS NOT NULL
+            AND t.cerrado_en > t.sla_resolucion_limite"""
+        + sla_filtro_agente,
+        p_cerrado + p_agente,
+    )
+    sla_cerrados_fuera_plazo = micursor.fetchone()['n']
+
+    micursor.execute(
+        """SELECT COUNT(*) AS n FROM tickets t WHERE """
+        + base_cerrado
+        + """ AND t.cerrado_en IS NOT NULL
+            AND t.sla_resolucion_limite IS NOT NULL
+            AND t.cerrado_en <= t.sla_resolucion_limite"""
+        + sla_filtro_agente,
+        p_cerrado + p_agente,
+    )
+    sla_cerrados_en_plazo = micursor.fetchone()['n']
+
+    if cerrados > 0:
+        sla_cumplimiento_pct = round(100 * sla_cerrados_en_plazo / cerrados, 1)
+    else:
+        sla_cumplimiento_pct = None
+
+    micursor.execute(
+        """SELECT AVG(TIMESTAMPDIFF(SECOND, t.creado_en, t.cerrado_en)) AS media
+           FROM tickets t WHERE """
+        + base_cerrado + ' AND t.cerrado_en IS NOT NULL' + sla_filtro_agente,
+        p_cerrado + p_agente,
+    )
+    mttr_segundos = micursor.fetchone()['media']
+
+    micursor.execute(
+        """SELECT AVG(TIMESTAMPDIFF(SECOND, t.creado_en, t.primera_respuesta_en)) AS media
+           FROM tickets t WHERE """
+        + base_creado
+        + ' AND t.primera_respuesta_en IS NOT NULL' + sla_filtro_agente,
+        p_creado + p_agente,
+    )
+    media_respuesta_seg = micursor.fetchone()['media']
+
+    sla_plazo, sla_riesgo, sla_vencido = _sla_donut_activos(filtro_agente_id, dias_periodo)
+    tendencia_semanas, tendencia_creados, tendencia_cerrados = _tendencia_semanal_dashboard(
+        8, filtro_agente_id,
+    )
+
+    micursor.execute(
+        """SELECT COALESCE(a.nombre, 'Sin asignar') AS nombre,
+                  COALESCE(t.agente_id, 0) AS agente_id,
+                  COUNT(t.id) AS total
+           FROM tickets t
+           LEFT JOIN usuarios a ON t.agente_id = a.id
+           WHERE """ + base_activo + sql_agente + """
+           GROUP BY t.agente_id, a.nombre
+           ORDER BY total DESC""",
+        p_creado + p_agente,
+    )
     por_agente = micursor.fetchall()
 
     sql_categoria = """
-        SELECT cat.nombre, COUNT(t.id) AS total
+        SELECT cat.id AS categoria_id, cat.nombre, COUNT(t.id) AS total
         FROM tickets t
         LEFT JOIN categorias cat ON t.categoria_id = cat.id
-        WHERE 1=1
+        WHERE """ + base_creado + sql_agente + """
+        GROUP BY cat.id, cat.nombre
+        ORDER BY total DESC
     """
-    if filtro_sql:
-        sql_categoria += filtro_sql.replace('agente_id', 't.agente_id')
-    sql_categoria += " GROUP BY cat.nombre ORDER BY total DESC"
-    micursor.execute(sql_categoria, filtro_params)
+    micursor.execute(sql_categoria, p_creado + p_agente)
     por_categoria = micursor.fetchall()
 
-    sql_ultimos = "SELECT titulo, creado_en FROM tickets WHERE 1=1"
-    sql_ultimos += filtro_sql + " ORDER BY creado_en DESC LIMIT 5"
-    micursor.execute(sql_ultimos, filtro_params)
+    sql_ultimos = (
+        'SELECT t.id, t.titulo, t.creado_en FROM tickets t WHERE ' + base_creado + sql_agente
+        + ' ORDER BY t.creado_en DESC LIMIT 5'
+    )
+    micursor.execute(sql_ultimos, p_creado + p_agente)
     ultimos = micursor.fetchall()
 
-    sla_filtro = filtro_sql.replace('agente_id', 't.agente_id') if filtro_sql else ''
-    sla_params = filtro_params
-
-    micursor.execute("""
-        SELECT COUNT(*) AS n FROM tickets t
-        WHERE t.estado != 'Cerrado'
-          AND t.primera_respuesta_en IS NULL
-          AND t.sla_respuesta_limite IS NOT NULL
-          AND NOW() > t.sla_respuesta_limite
-    """ + sla_filtro, sla_params)
-    sla_resp_vencidos = micursor.fetchone()['n']
-
-    micursor.execute("""
-        SELECT COUNT(*) AS n FROM tickets t
-        WHERE t.estado != 'Cerrado'
-          AND t.sla_resolucion_limite IS NOT NULL
-          AND NOW() > t.sla_resolucion_limite
-    """ + sla_filtro, sla_params)
-    sla_resol_vencidos = micursor.fetchone()['n']
-
-    micursor.execute("""
-        SELECT COUNT(*) AS n FROM tickets t
-        WHERE t.estado != 'Cerrado'
-          AND t.sla_respuesta_limite IS NOT NULL
-          AND t.primera_respuesta_en IS NULL
-          AND NOW() < t.sla_respuesta_limite
-          AND TIMESTAMPDIFF(SECOND, NOW(), t.sla_respuesta_limite)
-              <= TIMESTAMPDIFF(SECOND, t.creado_en, t.sla_respuesta_limite) * 0.25
-    """ + sla_filtro, sla_params)
-    sla_en_riesgo = micursor.fetchone()['n']
-
-    # Gráfico de barras: tickets por agente asignado (todos los estados)
     micursor.execute("""
         SELECT COALESCE(a.nombre, 'Sin asignar') AS nombre, COUNT(t.id) AS total
         FROM tickets t
         LEFT JOIN usuarios a ON t.agente_id = a.id
+        WHERE 1=1""" + sql_creado + sql_agente + """
         GROUP BY t.agente_id, a.nombre
         ORDER BY total DESC
-    """)
+    """, p_creado + p_agente)
     chart_agentes = micursor.fetchall()
     agentes = [f['nombre'] for f in chart_agentes]
     tickets_por_agente = [f['total'] for f in chart_agentes]
@@ -797,10 +981,25 @@ def dashboard():
         sla_resp_vencidos=sla_resp_vencidos,
         sla_resol_vencidos=sla_resol_vencidos,
         sla_en_riesgo=sla_en_riesgo,
+        sla_cerrados_fuera_plazo=sla_cerrados_fuera_plazo,
+        sla_cerrados_en_plazo=sla_cerrados_en_plazo,
+        sla_cumplimiento_pct=sla_cumplimiento_pct,
+        mttr_segundos=mttr_segundos,
+        media_respuesta_seg=media_respuesta_seg,
+        sla_plazo=sla_plazo,
+        sla_riesgo=sla_riesgo,
+        sla_vencido=sla_vencido,
+        tendencia_semanas=tendencia_semanas,
+        tendencia_creados=tendencia_creados,
+        tendencia_cerrados=tendencia_cerrados,
         agentes=agentes,
         tickets_por_agente=tickets_por_agente,
         lista_agentes=listar_agentes(),
         filtro_agente_id=filtro_agente_id,
+        periodo_clave=periodo_clave,
+        periodo_etiqueta=periodo_etiqueta,
+        dashboard_periodos=DASHBOARD_PERIODOS,
+        url_index=_url_index_dashboard,
     )
 
 
@@ -843,7 +1042,7 @@ def manual_usuario():
     )
 
 
-# Manual técnico — arquitectura, base de datos y despliegue (evaluación).
+# Manual técnico — arquitectura, base de datos y despliegue.
 @app.route('/manual/tecnico')
 def manual_tecnico():
     texto = _leer_manual('MANUAL_TECNICO.md')

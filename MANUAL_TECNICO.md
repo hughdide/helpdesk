@@ -190,9 +190,10 @@ Cada ruta lleva un comentario `# RUTA:` en el código fuente.
 
 - Constante `SLA_HORAS`: plazos por prioridad (baja/media/alta).
 - `calcular_limites_sla(prioridad, creado_en)` → tupla (límite respuesta, límite resolución).
-- `evaluar_sla(ticket)` → diccionario con estados `ok`, `riesgo`, `vencido`, `cumplido`.
-- `RIESGO_FRACCION = 0.25`: último 25 % del plazo = «en riesgo».
+- `evaluar_sla(ticket)` → diccionario con estados, límites (`limite_respuesta`, `limite_resolucion`), `estado_global` y `deadline_activo`.
+- `RIESGO_FRACCION = 0.25`: último 25 % del plazo = «en riesgo» (badge SLA).
 - `marcar_primera_respuesta()` al primer comentario público de agente/admin.
+- `etiqueta_estado(codigo)` → texto legible para plantillas (En plazo, Vencido, etc.).
 
 ### 6.2 `mailer.py` + `config_mail.py`
 
@@ -226,9 +227,44 @@ Cada ruta lleva un comentario `# RUTA:` en el código fuente.
 
 - **Bootstrap 5.3.3** (CDN).
 - **Sidebar** fijo bajo navbar (`top: 64px`); toggle móvil con ☰.
-- **Listado en tarjetas** con badges de estado, prioridad y SLA.
+- **Listado en tarjetas** (`index.html`): badge SLA arriba a la derecha; estado del ticket en el cuerpo de la tarjeta; contadores SLA en vivo.
 - **Filtro Jinja `fecha_es`:** formato `DD-MM-AAAA HH:MM`.
-- **Paleta:** verde (ok/abierto/baja), amarillo (proceso/media/riesgo), rojo (cerrado/alta/vencido).
+- **Paleta:** verde (ok/abierto/baja/cumplido), amarillo (proceso/media/riesgo), naranja (contador &lt; 2 h), rojo (cerrado/alta/vencido).
+
+### 8.1 Contadores SLA en listado de tickets
+
+Solo visibles para **agente** y **admin** en `templates/index.html`.
+
+**Estructura de cada tarjeta (zona SLA):**
+
+1. Badge **SLA:** + `estado_global` (calculado en servidor con `evaluar_sla`).
+2. Línea **1ª respuesta:** — cuenta atrás hasta `sla_respuesta_limite` o «Cumplida» si existe `primera_respuesta_en`.
+3. Línea **Resolución:** — «Cerrada en plazo» (verde) o «Cerrada fuera de plazo» (rojo) según `estado_resolucion`; cuenta atrás si sigue abierto.
+
+**Lógica en cliente (JavaScript embebido en `index.html`):**
+
+- Cada línea activa lleva `data-deadline` con fecha límite ISO.
+- `setInterval(..., 1000)` recalcula el texto cada segundo.
+- Umbral urgente: `2 * 60 * 60 * 1000` ms (2 horas).
+- Clases CSS en `static/css/styles.css`:
+  - `.sla-timer` — texto negro por defecto.
+  - `.sla-timer-urgente` — naranja (`#e67e22`) si quedan &lt; 2 h.
+  - `.sla-timer-vencido` — rojo si el plazo ya pasó.
+  - `.sla-timer-cumplido` — verde si cumplida/cerrada.
+
+**Flujo de datos:**
+
+```mermaid
+flowchart LR
+    DB[("tickets · límites SLA")]
+    SLA["sla.py · evaluar_sla"]
+    APP["app.py · enriquecer_sla_listado"]
+    TPL["index.html · data-deadline"]
+    JS["JavaScript · setInterval 1s"]
+    CSS["styles.css · colores"]
+
+    DB --> SLA --> APP --> TPL --> JS --> CSS
+```
 
 Plantillas principales: `base.html`, `index.html`, `ticket_detalle.html`, `dashboard.html`, `login.html`, `register.html`, `olvide_contrasena.html`, `reset_password.html`, `solicitar_cambio_contrasena.html`, `new_ticket.html`, `usuarios.html`, `editar_usuario.html`, `categorias.html`, `notificaciones.html`, `manual_view.html`.
 
@@ -334,6 +370,16 @@ Requiere `MAIL_ENABLED=1` y `mail.env` configurado (IONOS, etc.):
 2. **POST `/usuario/editar/<id>`** actualiza nombre, email, rol y contraseña opcional.
 3. **POST `/usuario/eliminar/<id>`** elimina la cuenta seleccionada tras confirmación en interfaz.
 4. Protección de seguridad: el admin logueado no puede eliminar su propio usuario en esa sesión.
+
+### 10.8 Contadores SLA en listado (agente/admin)
+
+1. `listar_tickets_consulta()` obtiene tickets con JOINs.
+2. `enriquecer_sla_listado()` añade `t['sla'] = evaluar_sla(t)` por ticket.
+3. `index.html` renderiza:
+   - Badge `estado_global` arriba a la derecha.
+   - `data-deadline` con `limite_respuesta` y `limite_resolucion`.
+4. JavaScript en el navegador actualiza cada segundo el texto «Quedan X» / «Vencido hace X».
+5. Colores: negro (&gt; 2 h), naranja (&lt; 2 h), rojo (vencido), verde (cumplida/cerrada).
 
 ---
 
